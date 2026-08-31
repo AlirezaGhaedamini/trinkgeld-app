@@ -43,8 +43,11 @@ their real status, and files real tip reports in integer cents. A manager
 reviews, corrects and approves them. `src/shifts/` and `src/tips/` are the data
 layers; every worked minute and business date is computed by the database.
 
-**Phase 3D — pools and distributions.** Still on the local mock data; that is
-the next phase (see `NEXT_STEPS.md`).
+**Phase 3D — pools, distributions and history. Complete.** The pool is summed
+by the database from the team's reports, the split is calculated by
+`calculate_distribution()`, finalised by `send_distribution()` and read back
+from the stored record. The client-side engine is a preview only: on €10 split
+three ways it loses a cent, which is exactly why the database is authoritative.
 
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
@@ -317,6 +320,7 @@ Nothing writes a membership directly. Creation and joining go through the Phase
 node scripts/rls-check.mjs         # Phase 3A: profile isolation
 node scripts/workplace-check.mjs   # Phase 3B: membership, invitations, promotion attempts
 node scripts/shifts-check.mjs      # Phase 3C: shifts, review columns, tip reports
+node scripts/distribution-check.mjs # Phase 3D: pools, calculation, finalisation, history
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test

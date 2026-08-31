@@ -738,6 +738,7 @@ export type Database = {
           engine_version: string
           entries_total_cents: number
           id: string
+          inputs_fingerprint: string | null
           inputs_snapshot: Json
           method: Database["public"]["Enums"]["rule_method"]
           min_overlap_minutes: number
@@ -767,6 +768,7 @@ export type Database = {
           engine_version: string
           entries_total_cents?: number
           id?: string
+          inputs_fingerprint?: string | null
           inputs_snapshot: Json
           method: Database["public"]["Enums"]["rule_method"]
           min_overlap_minutes: number
@@ -796,6 +798,7 @@ export type Database = {
           engine_version?: string
           entries_total_cents?: number
           id?: string
+          inputs_fingerprint?: string | null
           inputs_snapshot?: Json
           method?: Database["public"]["Enums"]["rule_method"]
           min_overlap_minutes?: number
@@ -866,6 +869,55 @@ export type Database = {
           },
           {
             foreignKeyName: "tip_distributions_workplace_id_fkey"
+            columns: ["workplace_id"]
+            isOneToOne: false
+            referencedRelation: "workplaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tip_pool_sources: {
+        Row: {
+          card_cents: number
+          cash_cents: number
+          created_at: string
+          pool_id: string
+          tip_report_id: string
+          workplace_id: string
+        }
+        Insert: {
+          card_cents: number
+          cash_cents: number
+          created_at?: string
+          pool_id: string
+          tip_report_id: string
+          workplace_id: string
+        }
+        Update: {
+          card_cents?: number
+          cash_cents?: number
+          created_at?: string
+          pool_id?: string
+          tip_report_id?: string
+          workplace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tip_pool_sources_pool_id_fkey"
+            columns: ["pool_id"]
+            isOneToOne: false
+            referencedRelation: "tip_pools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tip_pool_sources_tip_report_id_fkey"
+            columns: ["tip_report_id"]
+            isOneToOne: false
+            referencedRelation: "tip_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tip_pool_sources_workplace_id_fkey"
             columns: ["workplace_id"]
             isOneToOne: false
             referencedRelation: "workplaces"
@@ -1426,6 +1478,15 @@ export type Database = {
           invitation_id: string
           token: string
         }[]
+      }
+      create_pool_from_reports: {
+        Args: {
+          p_label?: string
+          p_period_end: string
+          p_period_start: string
+          p_workplace_id: string
+        }
+        Returns: string
       }
       create_rule_draft: { Args: { p_workplace_id: string }; Returns: string }
       create_workplace: {

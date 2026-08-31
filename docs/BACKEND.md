@@ -51,6 +51,9 @@ each one is independently reviewable.
 | `…001200_member_read_layer.sql` | the two member-facing views |
 | `…001300_audit_log.sql` | `audit_log` and the generic `app.write_audit()` trigger |
 | `…001400_shift_write_guard.sql` | column-level guard on `shifts` — see below |
+| `…001500_distribution_integrity.sql` | three defects found auditing the money path — see below |
+| `…001600_pairwise_overlap.sql` | the pairwise model, and no silent redistribution |
+| `…001700_calc_no_unqualified_update.sql` | removes the one write with no WHERE clause — see below |
 
 ---
 
@@ -167,6 +170,39 @@ and before/after JSON.
 
 ---
 
+## 3a. Three defects found in the Phase 2 money path
+
+Audited before Phase 3D connected any screen to it. All three are fixed in
+migration 15.
+
+**The engine ignored `overlap_basis`.** `public.overlap_basis` has three values
+and `calculate_distribution()` implements exactly one — the longest shift of the
+period as the anchor. It never read the column, but it wrote it into
+`tip_distributions.overlap_basis` and into `rules_snapshot`. A rule set to
+`pairwise` would have computed longest-shift and then produced a permanent
+record saying otherwise. Fixed by refusing: `app.engine_supports_basis()` gates
+both `activate_rule()` and a trigger on the distributions table, so an
+unimplemented model cannot be activated or recorded. Implementing pairwise
+overlap is a product decision, not a bug fix, and is deliberately not done here.
+
+**`send_distribution()` finalised a stale draft.** A manager calculates, a
+colleague approves another shift, the manager presses send: the new shift was
+silently left out of an immutable payment record. Fixed with
+`app.distribution_fingerprint()` — a digest of the pool amounts, the active rule
+with its area shares and role points, and every approved shift in the period
+with the member facts that weight it. Taken at calculation, re-derived at send,
+and a mismatch is refused with a message telling the manager to recalculate.
+This is option (B): silently including the new state would finalise numbers
+nobody previewed.
+
+**A tip report could fund two pools.** `tip_pools.source` could say
+`staff_reports`, but nothing derived a pool from them and nothing recorded which
+reports a pool consumed, so two pools with overlapping periods could both count
+the same money. Fixed with `create_pool_from_reports()`, which sums server-side,
+and `tip_pool_sources`, whose unique index on `tip_report_id` makes double
+counting impossible rather than merely discouraged. Voiding a pool releases its
+reports.
+
 ## 4. The distribution engine
 
 `calculate_distribution(p_pool_id)` runs in one transaction:
@@ -178,6 +214,26 @@ and before/after JSON.
    other shift's overlap against it via `app.overlap_minutes()`.
 3. **Eligibility** — a shift with less overlap than `min_overlap_minutes` is
    excluded, and the reason is written into `inputs_snapshot`.
+
+   The reasons are checked **in order**, and the first two come before the
+   overlap model is consulted at all:
+
+   | reason | when |
+   | --- | --- |
+   | `no_area` | the shift resolves to no area (no override, no member default) |
+   | `area_not_in_pool` | the effective area's share in the active rule is `0` |
+   | `sole_worker` | pairwise, and this is the only person in the period |
+   | `included` | the rules below are satisfied |
+   | `no_pairwise_overlap` | pairwise, and this person has no link to anyone |
+   | `anchor` / `below_min_overlap` | longest_shift, measured against the anchor |
+
+   `area_not_in_pool` is the one that surprises people: someone whose area has
+   a 0% share is dropped **before** any overlap is considered, so they are not
+   paid, do not appear as a zero-cent entry, and cannot keep a partner eligible.
+   Move a member into a zero-share area and a two-person pairwise crew becomes a
+   one-person one. That is intended — a 0% area is not part of this pool — but
+   it makes member areas part of the fixture of any test that asserts who was
+   paid.
 4. **Units** — `hours_points`: `overlap_hours × role_points × member_multiplier`.
    `hours`: `overlap_hours × multiplier`. `equal`: 1 per eligible person.
 5. **Split by area** — the pool is divided by the rule's area percentages, using
@@ -195,6 +251,110 @@ lets an employee confirm or query **their own** entry.
 
 Engine version: `app.engine_version()` → `pg-1.0.0`, stored on every
 distribution.
+
+### The overlap models
+
+Two are implemented. `overlap_basis` on the active rule chooses, and switching is
+an explicit, versioned act: a manager activates a rule that names the other
+model. `longest_shift` remains the column default.
+
+**`longest_shift`** — one anchor. The anchor is the single longest effective
+shift of the whole period across every area; ties break to the earlier start,
+then the shift id. Every other shift's overlap is measured against that one
+shift; below `min_overlap_minutes` is out, and the anchor is always in. Its known
+consequence: with A anchoring, B overlapping A, and C overlapping B but not A, C
+is excluded although C did work alongside B.
+
+**`pairwise`** — the overlap graph.
+
+1. Candidates are the same: approved shifts in the period with
+   `worked_minutes > 0`, resolved to an effective area and role.
+2. For every unordered pair of distinct members, `overlap(P, Q)` is the sum of
+   `|shift_p ∩ shift_q|` over every combination of their shifts, in whole
+   minutes. A person's own shifts cannot overlap — the exclusion constraint
+   forbids it — so this sum is exactly the time the two were both at work.
+   Multiple shifts, several partial overlaps, different areas and overnight
+   spans all fall out of this, because the intervals are instants rather than
+   clock faces.
+3. P and Q are **linked** when `overlap(P, Q) >= min_overlap_minutes`. Exactly
+   at the threshold links; one minute below does not.
+4. **Eligibility.** With exactly one candidate member, that member is eligible —
+   somebody who worked alone has not forfeited the tips. Otherwise a member is
+   eligible when they have at least one link; a member with no link is excluded
+   and the snapshot records `no_pairwise_overlap`.
+5. **Connectivity.** Chains are intended: A—B and B—C puts A, B and C in one
+   group even though A and C never met. If the eligible members fall into two or
+   more disconnected groups, the distribution is **refused** — two crews who
+   never met cannot both be the crew that earned one pool, and picking one
+   silently is the kind of invisible decision this product exists to remove.
+6. **Weighting is unchanged**: worked time × role points × personal multiplier.
+   The anchor never entered the weighting; only the membership of the pool
+   changed. Each entry records that member's largest pairwise overlap, so the row
+   still carries the number that justified their inclusion.
+
+The whole graph, linked and unlinked pairs alike, is written into
+`inputs_snapshot.pairs`, so a distribution can be re-argued from the record.
+
+`service_window` remains an enum value with no implementation, and activating a
+rule that names it is an error rather than a silent substitution.
+
+### Rounding, exactly
+
+Largest remainder, twice.
+
+*Pool → areas*. Every area with a share above zero must have at least one
+eligible person: since migration 16, one that does not **stops the distribution
+and names the area**, rather than having its money absorbed by the areas that do.
+No money moves without somebody deciding it should. Ties break by remainder,
+then the rule's `rounding_area_id`, then percentage, then area key.
+
+*Area → people*, ties by remainder, then units, then member id.
+
+Then an assertion: if the assigned cents do not equal the pool, the whole
+transaction raises. €10 among three is 333 / 333 / 334, and the entry that took
+the extra cent records it in `rounding_adjustment_cents`.
+
+---
+
+## 4a. pg_safeupdate, and why the engine has no unqualified write
+
+Supabase preloads `pg_safeupdate` into the connections PostgREST uses (it is set
+on the `authenticator` role), so it is armed for the whole session. Every
+`UPDATE` and `DELETE` whose plan carries no qualifier is refused with
+
+```
+SQLSTATE 21000 — UPDATE requires a WHERE clause
+```
+
+The hook does not care that the statement sits inside a `security definer`
+function, and it does not care that the target is a session-local temp table.
+It is a plan-level check, so a staging table gets exactly the same treatment as
+a table of real money.
+
+`calculate_distribution()` carried one such statement from migration 11 until
+migration 17: `update tmp_entries set units = …` with no `where`, filling in a
+column that had just been added with `alter table`. The intent was "every row
+of this staging table", which is legitimate — but the only way to say that to
+the planner is to say nothing, and saying nothing is what the guard forbids.
+Nothing local reproduces this, because a plain PostgreSQL cluster has no such
+hook; the statement can only fail on the real REST path.
+
+Migration 17 derives `units` inside the `create temp table … as select` that
+stages the rows, so the value is set at construction and there is no second
+statement at all. The guard stays on, globally, for every role.
+
+Two things follow for anything added later:
+
+* Never turn the guard off — not with `set local safeupdate.enabled = off`, and
+  not with a `where <column> is not null` tautology bolted onto an otherwise
+  unqualified write. Both keep the write and merely silence the check.
+* If a statement really must touch every row of a staging structure, build the
+  value into the `create table … as select`, or give the write a qualifier that
+  is true of the rows it is meant to touch and false of anything else.
+
+`supabase/tests/07_no_unqualified_writes.sql` lints every `plpgsql` and `sql`
+function in `public` and `app` for this shape, so the class of bug cannot come
+back unnoticed on a cluster that has no `pg_safeupdate` to catch it.
 
 ---
 
@@ -275,6 +435,38 @@ Because employees cannot select `tip_distributions`, any policy elsewhere that
 used a subquery against it evaluated to *false* for them — which silently hid
 their own entries. That is why `app.distribution_is_published(uuid)` exists and
 is used by the entries, areas and acknowledgement policies.
+
+#### Visibility is per workplace, and follows the CURRENT membership
+
+`app.member_id()`, `app.is_member()`, `app.is_manager()` and
+`app.member_workplaces()` all require `status = 'active'`, and
+`member_distributions` repeats the same test in its `WHERE` clause. So the rule
+across the whole financial surface is one sentence: **current membership status
+controls financial access, per workplace.**
+
+Suspend a membership and, in that workplace, the person immediately loses their
+entries, the distribution summaries, the area subtotals and the ability to
+acknowledge — the records stay stored, they just stop being readable.
+`app.can_see_entry()` short-circuits on `app.member_id(...) is null`, so an
+inactive membership fails *before* `peer_entry_visibility` is ever consulted.
+
+The other half of "per workplace" is the one that catches test authors out: one
+person can hold memberships in several workplaces, each with its own
+`workplace_members.id`. An unfiltered `select * from
+member_distribution_entries` therefore spans all of them, and the rows from the
+other workplaces carry *that* workplace's member id. Comparing every row's
+`member_id` against one workplace's membership makes a person's own entry
+elsewhere look foreign, and suspending them here does not remove it — correctly.
+
+Two invariants, and they are different:
+
+| question | how to ask it |
+| --- | --- |
+| does peer visibility hold in **this** workplace? | filter `workplace_id`, then compare `member_id` to that workplace's membership |
+| is anything readable at all that is not theirs? | read unfiltered and require `is_own = true` on every row |
+
+`supabase/tests/09_entry_visibility.sql` asserts both, along with each
+`peer_entry_visibility` setting, the manager cases and the suspended case.
 
 ### Invitations
 
@@ -362,6 +554,12 @@ supabase/tests/rebuild.sh --test   # …then run the assertion suite
 `auth.uid()` and the three Supabase roles so the policies can be exercised
 without a Supabase instance. It is not a migration and is never applied to a
 real project.
+
+A plain cluster has no `pg_safeupdate`, so the suite cannot reproduce SQLSTATE
+21000 behaviourally. `07_no_unqualified_writes.sql` stands in for it with a lint
+over the installed function bodies plus the calculate-a-draft path that failed
+live. `scripts/distribution-check.mjs` remains the live regression: it runs
+against the real project over PostgREST, where the guard is actually armed.
 
 ---
 

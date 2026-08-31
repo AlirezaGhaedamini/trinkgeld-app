@@ -26,3 +26,32 @@ export const AREA_ICON: Record<AreaId, IconName> = {
   Host: 'door-open',
   Management: 'briefcase',
 };
+
+/**
+ * The same icons and colours, keyed by the database's area key.
+ *
+ * Phase 2 seeds every workplace with these six keys, so a real workplace maps
+ * onto the prototype's vocabulary without a second design. An area a manager
+ * adds later falls back to the neutral pair.
+ */
+export const AREA_ICON_BY_KEY: Record<string, IconName> = {
+  service: 'hand-heart',
+  bar: 'martini',
+  kitchen: 'cooking-pot',
+  runner: 'sneaker-move',
+  reception: 'door-open',
+  management: 'briefcase',
+};
+
+export const AREA_COLOR_BY_KEY: Record<string, string> = {
+  service: 'var(--color-area-service)',
+  bar: 'var(--color-area-bar)',
+  kitchen: 'var(--color-area-kitchen)',
+  runner: 'var(--color-area-runner)',
+  reception: 'var(--color-area-host)',
+  management: 'var(--color-area-management)',
+};
+
+export const iconForAreaKey = (key: string): IconName => AREA_ICON_BY_KEY[key] ?? 'users-three';
+export const colorForAreaKey = (key: string): string =>
+  AREA_COLOR_BY_KEY[key] ?? 'var(--color-text-muted)';

@@ -45,8 +45,12 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
    * the distribution flow, which is Phase 3D — it stays on the local dataset so
    * the two are never half-connected.
    */
-  const queue = useReviewQueue();
-  const realReview = queue.enabled && mode === 'review';
+  // Step 3 of the wizard shows the hours that will take part, so it asks for
+  // approved shifts only — a submitted shift is not eligible for a payout.
+  const queue = useReviewQueue(
+    mode === 'wizard' ? ['approved'] : ['submitted', 'approved', 'rejected'],
+  );
+  const realReview = queue.enabled;
 
   const grouping = liveOverlap(state);
   const overlapFor = (employeeId: string) =>
@@ -74,7 +78,10 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
     return [...byArea.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [realReview, queue.shifts, t]);
 
-  const pending = realReview ? queue.shifts.filter((entry) => entry.status === 'submitted') : [];
+  const pending =
+    realReview && mode === 'review'
+      ? queue.shifts.filter((entry) => entry.status === 'submitted')
+      : [];
 
   /**
    * "Save hours" is the review being signed off: every shift still marked
@@ -161,11 +168,16 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
                         <Avatar name={entry.memberName ?? ''} size={34} />
                         <span className={ui.rowMain}>
                           <span className={`${ui.rowTitle} ${ui.truncate}`}>{entry.memberName}</span>
+                          {/* The effective area on every row, and marked when
+                              it came from the shift rather than the member —
+                              it is what the distribution will weight. */}
                           <span
                             className={ui.rowMeta}
                             style={{ display: 'block', color: 'var(--color-text-subtle)' }}
                           >
-                            {`${formatClock(entry.startMinutes)} – ${formatClock(entry.endMinutes)}`}
+                            {`${formatClock(entry.startMinutes)} – ${formatClock(entry.endMinutes)} · ${
+                              entry.areaName ?? t('notSet')
+                            }${entry.areaFromShift ? ` (${t('dAreaFromShift')})` : ''}`}
                           </span>
                         </span>
                         <Badge tone={status.tone} style={{ color: status.color }}>

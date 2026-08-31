@@ -35,6 +35,8 @@ export interface Shift {
   /** Filled in for the manager's list; the roster is readable to the workplace. */
   memberName?: string;
   areaName?: string;
+  /** True when this shift overrode the member's default area. */
+  areaFromShift?: boolean;
 }
 
 /**

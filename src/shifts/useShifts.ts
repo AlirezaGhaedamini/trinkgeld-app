@@ -123,8 +123,16 @@ export function useOwnShifts() {
   return { enabled, status, shifts, busy, businessDate, refresh, submit };
 }
 
-/** The manager's queue: everything submitted in the active workplace. */
-export function useReviewQueue() {
+type QueueStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
+
+/**
+ * The manager's queue.
+ *
+ * The review screen wants everything that has been sent in; the distribution
+ * wizard wants only what has been approved, because only approved shifts take
+ * part in a distribution.
+ */
+export function useReviewQueue(statuses: readonly QueueStatus[] = ['submitted', 'approved', 'rejected']) {
   const client = useClient();
   const workplace = useWorkplace();
   const membership = workplace.activeMembership;
@@ -149,7 +157,7 @@ export function useReviewQueue() {
     const mine = (token.current += 1);
     setStatus((s) => (s === 'ready' ? s : 'loading'));
     try {
-      const rows = await fetchReviewQueue(client, membership, ['submitted', 'approved', 'rejected']);
+      const rows = await fetchReviewQueue(client, membership, statuses);
       if (!alive.current || mine !== token.current) return;
       setShifts(rows);
       setStatus('ready');
@@ -157,7 +165,8 @@ export function useReviewQueue() {
       if (!alive.current || mine !== token.current) return;
       setStatus('error');
     }
-  }, [client, membership]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, membership, statuses.join(',')]);
 
   useEffect(() => {
     if (!enabled) {

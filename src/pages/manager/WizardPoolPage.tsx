@@ -9,6 +9,9 @@ import { useI18n } from '@/hooks/useI18n';
 import { useShiftLabel } from '@/hooks/useShiftLabel';
 import { centsToAmount } from '@/lib/money';
 import { draftPoolAmount, reportsTotalCents } from '@/state/selectors';
+import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
+import { useDistributionWizard } from '@/distribution/useDistribution';
+import { useToast } from '@/hooks/useToast';
 import type { PoolPeriod } from '@/types';
 import { useState } from 'react';
 import ui from '@/components/ui/ui.module.css';
@@ -21,16 +24,65 @@ export function WizardPoolPage() {
   const { t, money } = useI18n();
   const shift = useShiftLabel();
   const navigate = useNavigate();
+  const { show } = useToast();
   const [field, setField] = useState<'card' | 'cash'>('card');
 
-  const pool = draftPoolAmount(state);
+  const wizard = useDistributionWizard();
+  const real = wizard.enabled;
+
+  /**
+   * Where the number comes from.
+   *
+   * With reports in hand the database sums them — create_pool_from_reports()
+   * adds up the rows and records which ones it consumed, so the browser never
+   * asserts how much money there is and the same report cannot fund two pools.
+   * The keypad is for the case there is nothing to derive from.
+   */
+  const derived = real && wizard.reportTotal.count > 0;
+  const realCents = wizard.pool
+    ? wizard.pool.totalCents
+    : derived
+      ? wizard.reportTotal.cardCents + wizard.reportTotal.cashCents
+      : state.draft.cardCents + state.draft.cashCents;
+
+  const pool = real ? centsToAmount(realCents) : draftPoolAmount(state);
+  const poolLocked = Boolean(wizard.pool && wizard.pool.status !== 'open');
+
+  const advance = async () => {
+    if (!real) {
+      navigate('/manager/new/areas');
+      return;
+    }
+    if (wizard.pool) {
+      navigate('/manager/new/areas');
+      return;
+    }
+    const result = derived
+      ? await wizard.openPoolFromReports()
+      : await wizard.openManualPool(state.draft.cardCents, state.draft.cashCents);
+    if (!result.ok) {
+      show(t(DISTRIBUTION_FAILURE_KEY[result.failure ?? 'unknown']));
+      return;
+    }
+    navigate('/manager/new/areas');
+  };
 
   return (
     <Screen
       title={t('tipPool')}
       kicker={`${t('step')} 1/4`}
       back="close"
-      cta={{ label: t('nextAreas'), onClick: () => navigate('/manager/new/areas') }}
+      cta={{
+        label: wizard.busy ? t('dPoolOpening') : t('nextAreas'),
+        muted: wizard.busy || (real && !wizard.pool && realCents <= 0),
+        onClick: () => {
+          if (real && !wizard.pool && realCents <= 0) {
+            show(t(derived ? 'dErrEmptyPool' : 'dNoReportsYet'));
+            return;
+          }
+          void advance();
+        },
+      }}
     >
       <SegmentedControl<PoolPeriod>
         label={t('tipPool')}
@@ -60,7 +112,7 @@ export function WizardPoolPage() {
         </p>
       </div>
 
-      {state.reports.length > 0 ? (
+      {(real ? wizard.reportTotal.count > 0 : state.reports.length > 0) ? (
       <CardButton padding="padded" onClick={() => navigate('/manager/reports')}>
         <span className={ui.inline}>
           <Icon name="notebook" size={17} color="var(--color-accent)" />
@@ -68,7 +120,14 @@ export function WizardPoolPage() {
             className={ui.rowMain}
             style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}
           >
-            {t('reportsHead')} · {money(centsToAmount(reportsTotalCents(state)))}
+            {t('reportsHead')} ·{' '}
+            {money(
+              centsToAmount(
+                real
+                  ? wizard.reportTotal.cardCents + wizard.reportTotal.cashCents
+                  : reportsTotalCents(state),
+              ),
+            )}
           </span>
           <Icon name="caret-right" size={13} color="var(--color-text-subtle)" />
         </span>
@@ -79,24 +138,43 @@ export function WizardPoolPage() {
         <MoneyField
           icon="credit-card"
           label={t('srcCard')}
-          value={money(centsToAmount(state.draft.cardCents))}
+          value={money(
+            centsToAmount(
+              real
+                ? (wizard.pool?.cardCents ?? (derived ? wizard.reportTotal.cardCents : state.draft.cardCents))
+                : state.draft.cardCents,
+            ),
+          )}
           active={field === 'card'}
           onSelect={() => setField('card')}
         />
         <MoneyField
           icon="money"
           label={t('srcCash')}
-          value={money(centsToAmount(state.draft.cashCents))}
+          value={money(
+            centsToAmount(
+              real
+                ? (wizard.pool?.cashCents ?? (derived ? wizard.reportTotal.cashCents : state.draft.cashCents))
+                : state.draft.cashCents,
+            ),
+          )}
           active={field === 'cash'}
           onSelect={() => setField('cash')}
         />
       </div>
 
-      <MoneyKeypad
-        label={t('totalCollected')}
-        cents={field === 'card' ? state.draft.cardCents : state.draft.cashCents}
-        onChange={(cents) => dispatch({ type: 'setPoolCents', field, cents })}
-      />
+      {/* The keypad appears only when there is something for a person to type:
+          a derived total is the database's to state, and a locked pool's
+          amounts are frozen by app.guard_pool_amounts(). */}
+      {real && (derived || poolLocked) ? (
+        <p className={ui.note}>{poolLocked ? t('dPreviewBody') : t('dPoolFromReports')}</p>
+      ) : (
+        <MoneyKeypad
+          label={t('totalCollected')}
+          cents={field === 'card' ? state.draft.cardCents : state.draft.cashCents}
+          onChange={(cents) => dispatch({ type: 'setPoolCents', field, cents })}
+        />
+      )}
     </Screen>
   );
 }

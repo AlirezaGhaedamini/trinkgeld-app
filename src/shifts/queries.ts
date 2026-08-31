@@ -91,6 +91,7 @@ export async function fetchReviewQueue(
       ...shift,
       memberName: member?.display_name,
       areaName: effectiveAreaId ? areaById.get(effectiveAreaId)?.name : undefined,
+      areaFromShift: row.area_id !== null,
     };
   });
 }
