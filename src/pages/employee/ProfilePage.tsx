@@ -7,6 +7,7 @@ import { Icon, type IconName } from '@/components/ui/Icon';
 import { Note } from '@/components/ui/Note';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
 import { useAuth, useRealAuth } from '@/hooks/useAuth';
+import { useWorkplace } from '@/hooks/useWorkplace';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { workedMinutes } from '@/lib/time';
@@ -33,6 +34,7 @@ export function ProfilePage() {
   const navigate = useNavigate();
   const auth = useAuth();
   const real = useRealAuth();
+  const workplace = useWorkplace();
 
   /**
    * Sign out of Supabase first, then clear the local state.
@@ -53,6 +55,18 @@ export function ProfilePage() {
   const submission = state.submissions[state.session.employeeId];
 
   const rows: SettingRow[] = [
+    // Only when there is actually a choice to make. One workplace, no row.
+    ...(workplace.enabled && workplace.memberships.length > 1
+      ? [
+          {
+            icon: 'briefcase' as const,
+            label: t('workplace'),
+            value: workplace.activeMembership?.workplace.name ?? t('notSet'),
+            valueColor: 'var(--color-accent)',
+            onClick: () => navigate('/workplaces'),
+          },
+        ]
+      : []),
     {
       icon: 'translate',
       label: t('sLang'),

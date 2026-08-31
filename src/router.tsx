@@ -5,11 +5,13 @@ import {
   RequireManager,
   RequireNoSession,
   RequireSession,
+  RequireWorkplace,
 } from '@/components/layout/guards';
 
 import { SignInPage } from '@/pages/auth/SignInPage';
 import { SignUpPage } from '@/pages/auth/SignUpPage';
 import { JoinWorkplacePage } from '@/pages/auth/JoinWorkplacePage';
+import { SelectWorkplacePage } from '@/pages/auth/SelectWorkplacePage';
 
 import { HomePage } from '@/pages/employee/HomePage';
 import { MyHoursPage } from '@/pages/employee/MyHoursPage';
@@ -54,57 +56,70 @@ export function AppRoutes() {
       </Route>
 
       {/*
-        Sign-up and the workplace step are NOT wrapped: sign-up ends with a live
-        session and then continues to /join, so a blanket "already signed in?
-        go to the app" guard here would skip the workplace step entirely.
-        SignUpPage turns an unrelated visitor away itself.
+        Sign-up is NOT wrapped: it ends with a live session and then continues
+        to /join, so a blanket "already signed in? go to the app" guard here
+        would skip the workplace step entirely. SignUpPage turns an unrelated
+        visitor away itself.
       */}
       <Route element={<AppLayout />}>
         <Route path="/signup" element={<SignUpPage />} />
-        <Route path="/join" element={<JoinWorkplacePage />} />
       </Route>
 
       <Route element={<RequireSession />}>
-        {/* ── employee, tab roots ───────────────────────────────────────── */}
-        <Route element={<AppLayout withTabs />}>
-          <Route path="/home" element={<HomePage />} />
-          <Route path="/hours" element={<MyHoursPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-        </Route>
-
-        {/* ── employee, pushed screens ──────────────────────────────────── */}
+        {/*
+          Onboarding. Behind the session (creating or joining a workplace needs
+          auth.uid()) but deliberately OUTSIDE RequireWorkplace, since these are
+          the two screens someone with no workplace is sent to.
+        */}
         <Route element={<AppLayout />}>
-          <Route path="/profile/language" element={<LanguagePage />} />
-          <Route path="/payout/:distributionId" element={<PayoutPage />} />
-          <Route path="/report" element={<ReportTipsPage />} />
+          <Route path="/join" element={<JoinWorkplacePage />} />
+          <Route path="/workplaces" element={<SelectWorkplacePage />} />
         </Route>
+      </Route>
 
-        {/* ── manager ───────────────────────────────────────────────────── */}
-        <Route element={<RequireManager />}>
+      <Route element={<RequireSession />}>
+        <Route element={<RequireWorkplace />}>
+          {/* ── employee, tab roots ───────────────────────────────────────── */}
           <Route element={<AppLayout withTabs />}>
-            <Route path="/manager" element={<DashboardPage />} />
-            <Route path="/manager/distributions" element={<DistributionsPage />} />
-            <Route path="/manager/team" element={<TeamPage />} />
-            <Route path="/manager/rules" element={<RulesPage />} />
+            <Route path="/home" element={<HomePage />} />
+            <Route path="/hours" element={<MyHoursPage />} />
+            <Route path="/history" element={<HistoryPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
 
+          {/* ── employee, pushed screens ──────────────────────────────────── */}
           <Route element={<AppLayout />}>
-            <Route path="/manager/new" element={<Navigate to="/manager/new/pool" replace />} />
-            <Route path="/manager/new/pool" element={<WizardPoolPage />} />
-            <Route path="/manager/new/areas" element={<WizardAreasPage />} />
-            <Route path="/manager/new/hours" element={<HoursReviewPage mode="wizard" />} />
-            <Route path="/manager/new/result" element={<WizardResultPage />} />
-            <Route path="/manager/sent" element={<SentPage />} />
-            <Route path="/manager/hours" element={<HoursReviewPage mode="review" />} />
-            <Route path="/manager/overlap" element={<OverlapPage />} />
-            <Route path="/manager/reports" element={<StaffReportsPage />} />
-            <Route path="/manager/invite" element={<InvitePage />} />
-            <Route path="/manager/team/:employeeId" element={<MemberPage />} />
-            <Route
-              path="/manager/distributions/:distributionId"
-              element={<DistributionDetailPage />}
-            />
+            <Route path="/profile/language" element={<LanguagePage />} />
+            <Route path="/payout/:distributionId" element={<PayoutPage />} />
+            <Route path="/report" element={<ReportTipsPage />} />
+          </Route>
+
+          {/* ── manager ───────────────────────────────────────────────────── */}
+          <Route element={<RequireManager />}>
+            <Route element={<AppLayout withTabs />}>
+              <Route path="/manager" element={<DashboardPage />} />
+              <Route path="/manager/distributions" element={<DistributionsPage />} />
+              <Route path="/manager/team" element={<TeamPage />} />
+              <Route path="/manager/rules" element={<RulesPage />} />
+            </Route>
+
+            <Route element={<AppLayout />}>
+              <Route path="/manager/new" element={<Navigate to="/manager/new/pool" replace />} />
+              <Route path="/manager/new/pool" element={<WizardPoolPage />} />
+              <Route path="/manager/new/areas" element={<WizardAreasPage />} />
+              <Route path="/manager/new/hours" element={<HoursReviewPage mode="wizard" />} />
+              <Route path="/manager/new/result" element={<WizardResultPage />} />
+              <Route path="/manager/sent" element={<SentPage />} />
+              <Route path="/manager/hours" element={<HoursReviewPage mode="review" />} />
+              <Route path="/manager/overlap" element={<OverlapPage />} />
+              <Route path="/manager/reports" element={<StaffReportsPage />} />
+              <Route path="/manager/invite" element={<InvitePage />} />
+              <Route path="/manager/team/:employeeId" element={<MemberPage />} />
+              <Route
+                path="/manager/distributions/:distributionId"
+                element={<DistributionDetailPage />}
+              />
+            </Route>
           </Route>
         </Route>
       </Route>

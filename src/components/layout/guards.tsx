@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthSplash } from '@/auth/AuthSplash';
 import { useAppState } from '@/hooks/useAppState';
 import { useAuth, useRealAuth } from '@/hooks/useAuth';
+import { useActiveRole, useWorkplace } from '@/hooks/useWorkplace';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 
@@ -42,8 +43,8 @@ export function RequireSession() {
 }
 
 /**
- * The sign-in and sign-up screens, which nobody who is already signed in should
- * be looking at. A refresh on `#/signin` with a live session lands in the app.
+ * The sign-in screen, which nobody who is already signed in should be looking
+ * at. A refresh on `#/signin` with a live session lands in the app.
  */
 export function RequireNoSession() {
   const gate = useSessionGate();
@@ -54,18 +55,46 @@ export function RequireNoSession() {
 }
 
 /**
+ * The app proper needs a workplace behind it.
+ *
+ * Three outcomes, and the difference between the first two matters as much as
+ * it does for the session:
+ *
+ *   still loading  → wait. Sending a manager to the onboarding screen on every
+ *                    refresh because the membership fetch had not landed yet
+ *                    would be worse than a moment of splash.
+ *   fetch failed   → also wait rather than redirect. An empty list caused by a
+ *                    dropped request must never look like "you have no
+ *                    workplace"; the provider keeps the last good list and the
+ *                    person sees the app they had.
+ *   no membership  → onboarding: create one or ask to join.
+ *   several, none chosen → pick one.
+ */
+export function RequireWorkplace() {
+  const workplace = useWorkplace();
+
+  if (!workplace.enabled) return <Outlet />;
+  if (workplace.status === 'idle' || workplace.status === 'loading') return <AuthSplash />;
+  if (workplace.status === 'error' && workplace.memberships.length === 0) return <AuthSplash />;
+  if (workplace.memberships.length === 0) return <Navigate to="/join" replace />;
+  if (!workplace.activeMembership) return <Navigate to="/workplaces" replace />;
+  return <Outlet />;
+}
+
+/**
  * Manager-only area.
  *
- * Employees are bounced back to their own home with the same "Managers only"
- * message the prototype showed — the separation is part of the product, not
- * only of the future backend. Supabase row-level security enforces the same
- * boundary server-side; this is convenience, never the control.
+ * The role comes from `useActiveRole()`, which in real mode reads the active
+ * `workplace_members` row. Nothing a client can write — the reducer, the
+ * sign-in toggle, local storage, a query string — reaches this decision. The
+ * database enforces the same boundary again on every statement; this guard is
+ * only here so an employee does not stare at a screen full of "denied".
  */
 export function RequireManager() {
-  const { session } = useAppState();
+  const role = useActiveRole();
   const { show } = useToast();
   const { t } = useI18n();
-  const denied = session.role !== 'manager';
+  const denied = role !== 'manager';
 
   useEffect(() => {
     if (denied) show(t('managerOnly'));
@@ -77,10 +106,18 @@ export function RequireManager() {
 
 /** Send people to the right home for who they are. */
 export function HomeRedirect() {
-  const { session } = useAppState();
   const gate = useSessionGate();
+  const workplace = useWorkplace();
+  const role = useActiveRole();
 
   if (gate === 'pending') return <AuthSplash />;
   if (gate === 'out') return <Navigate to="/signin" replace />;
-  return <Navigate to={session.role === 'manager' ? '/manager' : '/home'} replace />;
+
+  if (workplace.enabled) {
+    if (workplace.status === 'idle' || workplace.status === 'loading') return <AuthSplash />;
+    if (workplace.memberships.length === 0) return <Navigate to="/join" replace />;
+    if (!workplace.activeMembership) return <Navigate to="/workplaces" replace />;
+  }
+
+  return <Navigate to={role === 'manager' ? '/manager' : '/home'} replace />;
 }

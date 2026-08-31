@@ -26,8 +26,19 @@ employees out of manager-only tables. It has been applied and exercised against
 a real PostgreSQL 16 instance (`supabase/tests/rebuild.sh --test`, 85
 assertions). See **[`docs/BACKEND.md`](docs/BACKEND.md)**.
 
-**Phase 3 — wiring.** The React screens still read the local mock state. Nothing
-in the app talks to Supabase yet; that is the next phase (see `NEXT_STEPS.md`).
+**Phase 3A — authentication. Complete.** Sign-in, registration, session
+persistence, logout and route protection run on Supabase Auth. Profiles are
+created by the database trigger; the browser only reads them.
+
+**Phase 3B — workplaces and membership. Complete.** Creating a workplace,
+joining one, and the app's role all come from the database now. `src/workplace/`
+is the whole data layer: memberships are loaded after sign-in, the active
+workplace is resolved from them, and the manager/employee split is read from the
+active `workplace_members` row — never from local state, local storage or a
+query string.
+
+**Phase 3C — shifts, pools and distributions.** Still on the local mock data;
+that is the next phase (see `NEXT_STEPS.md`).
 
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
@@ -278,8 +289,32 @@ security and must never appear in this repository or in any `VITE_` variable.
 `.env` and `.env.*` are git-ignored; `.env.example` is the only exception and
 holds no real values.
 
-`src/lib/supabase.ts` creates the typed client. It is not called by any screen
-yet — that is Phase 3.
+`src/lib/supabase.ts` creates the typed client. `src/auth/` owns the session and
+the profile; `src/workplace/` owns memberships, the active workplace and the
+role. Screens consume them through `useAuth()`, `useWorkplace()` and
+`useActiveRole()` and never query Supabase themselves.
+
+### Where writes go
+
+Nothing writes a membership directly. Creation and joining go through the Phase
+2 RPCs, and the difference between them is the security model:
+
+| Path | Function | What it produces |
+| --- | --- | --- |
+| Set up a workplace | `create_workplace()` | the workplace, its areas and roles, and the manager membership — one transaction, so a workplace with no manager cannot exist |
+| Six-character join code | `request_join()` | a **pending request**. A manager still approves it; knowing the code is never enough |
+| Invitation link (`#/join?token=…`) | `accept_invitation()` | the membership, with the role the *invitation* carried. There is no role argument |
+
+### Verifying it against the real project
+
+```bash
+node scripts/rls-check.mjs         # Phase 3A: profile isolation
+node scripts/workplace-check.mjs   # Phase 3B: membership, invitations, promotion attempts
+```
+
+Both read `.env.local` and a gitignored `.env.test.local` holding two test
+accounts. `workplace-check.mjs` creates a workplace and an invitation, so point
+it at a development project.
 
 ## Future: Capacitor
 

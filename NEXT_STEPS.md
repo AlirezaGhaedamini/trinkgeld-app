@@ -3,10 +3,10 @@
 Where the project is and what comes next, in the order it should be built. Each
 step assumes the one before it.
 
-**Current state.** Phase 1 (frontend on mock data) and Phase 2 (the Supabase
-schema) are both complete. Nothing connects them yet: the app still reads local
-state, and the database has never been applied to a real Supabase project.
-Phase 3 is the wiring.
+**Current state.** Phases 1, 2, 3A and 3B are done. Authentication, profiles,
+workplace creation, joining and the app's role all run on the real database.
+What is still on the Phase 1 mock data: shifts, tip reports, pools,
+distributions and the rules editor. That is Phase 3C.
 
 ---
 
@@ -53,7 +53,7 @@ CLI output is the canonical form.
 Then check in the dashboard that RLS is enabled on all 16 tables and that the
 anon role can read nothing.
 
-### 2. Authentication
+### 2. Authentication — done (3A)
 
 Supabase Auth with email + password. Replace the submit handlers in
 `SignInPage` / `SignUpPage`; the screens stay as they are. Add a session
@@ -61,7 +61,7 @@ listener that fills `state.session` and drop `RequireSession`'s mock check.
 `app.handle_new_user()` creates the `profiles` row automatically — the client
 does not insert it.
 
-### 3. Workplace onboarding
+### 3. Workplace onboarding — done (3B)
 
 `create_workplace()` returns the new workplace id and seeds six areas, eleven
 roles and a draft rule. `request_join()` / `approve_join_request()` back the
@@ -73,7 +73,7 @@ This also closes the two known gaps in the empty state: a workplace now has a
 real name, and a manager can build a roster before anyone signs in, because
 `workplace_members.user_id` is nullable.
 
-### 4. Replace `src/data/` with queries
+### 4. Replace the rest of `src/data/` with queries — Phase 3C starts here
 
 `src/data/` is the seam. Manager screens read the base tables; employee screens
 read `member_distributions` and `member_distribution_entries` — never the base

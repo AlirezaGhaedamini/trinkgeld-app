@@ -306,6 +306,23 @@ export const EN = {
   authCheckInbox: "Almost there",
   authCheckInboxBody: "We sent a confirmation link to your email. Open it, then sign in.",
   authSignedOut: "Signed out",
+  // — workplaces and joining —
+  wpNameLabel: "Workplace name",
+  wpNamePlaceholder: "Caf\u00e9 Alto",
+  wpWorking: "One moment\u2026",
+  wpNeedName: "Give the workplace a name first.",
+  wpCreateFailed: "The workplace could not be created. Please try again.",
+  wpInvalidCode: "That code did not match an open workplace.",
+  wpInvalidInvite: "That invitation link is not valid.",
+  wpInviteExpired: "That invitation has expired. Ask for a new one.",
+  wpInviteUsed: "That invitation has already been used.",
+  wpAlreadyMember: "You are already in this workplace.",
+  wpNotAllowed: "You do not have permission to do that.",
+  wpRequestSent: "Request sent",
+  wpRequestPending: "Your manager has to approve the request. You will get in as soon as they do.",
+  wpChoose: "Your workplaces",
+  wpChooseBody: "You work in more than one place. Pick the one you want to open.",
+  wpNoneYet: "No workplaces yet.",
 } as const;
 
 export type StringKey = keyof typeof EN;
@@ -608,6 +625,23 @@ export const DE: Record<StringKey, string> = {
   authCheckInbox: "Fast geschafft",
   authCheckInboxBody: "Wir haben dir einen Best\u00e4tigungslink geschickt. \u00d6ffne ihn und melde dich dann an.",
   authSignedOut: "Abgemeldet",
+  // — Betriebe und Beitritt —
+  wpNameLabel: "Name des Betriebs",
+  wpNamePlaceholder: "Caf\u00e9 Alto",
+  wpWorking: "Einen Moment\u2026",
+  wpNeedName: "Gib dem Betrieb zuerst einen Namen.",
+  wpCreateFailed: "Der Betrieb konnte nicht erstellt werden. Bitte versuche es erneut.",
+  wpInvalidCode: "Der Code passt zu keinem offenen Betrieb.",
+  wpInvalidInvite: "Dieser Einladungslink ist ung\u00fcltig.",
+  wpInviteExpired: "Diese Einladung ist abgelaufen. Bitte um eine neue.",
+  wpInviteUsed: "Diese Einladung wurde bereits verwendet.",
+  wpAlreadyMember: "Du bist bereits in diesem Betrieb.",
+  wpNotAllowed: "Daf\u00fcr fehlt dir die Berechtigung.",
+  wpRequestSent: "Anfrage gesendet",
+  wpRequestPending: "Deine Leitung muss die Anfrage best\u00e4tigen. Danach bist du dabei.",
+  wpChoose: "Deine Betriebe",
+  wpChooseBody: "Du arbeitest an mehreren Orten. W\u00e4hle den, den du \u00f6ffnen m\u00f6chtest.",
+  wpNoneYet: "Noch keine Betriebe.",
 };
 
 export const DICTIONARIES = { English: EN, Deutsch: DE } as const;
