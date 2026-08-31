@@ -50,6 +50,7 @@ each one is independently reviewable.
 | `…001100_distribution_engine.sql` | `calculate_distribution()`, `send_distribution()`, `cancel_distribution()`, `acknowledge_entry()` |
 | `…001200_member_read_layer.sql` | the two member-facing views |
 | `…001300_audit_log.sql` | `audit_log` and the generic `app.write_audit()` trigger |
+| `…001400_shift_write_guard.sql` | column-level guard on `shifts` — see below |
 
 ---
 
@@ -217,6 +218,27 @@ granted only to `authenticated`.
 They exist to break **RLS recursion**: a membership policy that queries
 `workplace_members` would re-enter its own policy forever. A definer function
 reads the table with RLS bypassed, returns a boolean, and the policy stays flat.
+
+### Column-level guards
+
+RLS decides which **rows** a person may write. It cannot say which **columns**,
+and on `shifts` that difference is money.
+
+Migration 08's policy correctly lets an employee write their own shift while it
+is neither approved nor locked, and its `WITH CHECK` stops them setting
+`status = 'approved'`. But six columns on that table are not theirs:
+`workplace_role_id` (which the engine turns into `points`), `reviewed_by`,
+`reviewed_at`, `review_note`, `locked` and `source`. An employee who could name
+their own role on their own shift could pick the best-paid role in their area,
+and be approved on the hours — which is what a manager actually checks.
+
+`app.guard_shift_columns()` (migration 14) closes that, on INSERT and UPDATE,
+for anyone who is not a manager of the workplace. The area override stays open:
+`area_id` is the employee saying which area they actually worked, which
+migration 08 designed for and which a manager reviews before approving.
+
+`tip_reports` needs no equivalent — every column on it is the member's own
+statement, and the policies already restrict rows to their own membership.
 
 ### The one thing that must not be copied
 

@@ -3,10 +3,10 @@
 Where the project is and what comes next, in the order it should be built. Each
 step assumes the one before it.
 
-**Current state.** Phases 1, 2, 3A and 3B are done. Authentication, profiles,
-workplace creation, joining and the app's role all run on the real database.
-What is still on the Phase 1 mock data: shifts, tip reports, pools,
-distributions and the rules editor. That is Phase 3C.
+**Current state.** Phases 1, 2, 3A, 3B and 3C are done. Authentication,
+profiles, workplaces, membership, roles, shifts, hours review and tip reports
+all run on the real database. What is still on the Phase 1 mock data: tip pools,
+the distribution wizard and the rules editor. That is Phase 3D.
 
 ---
 
@@ -82,14 +82,14 @@ distribution tables, which they have no policy for.
 Keep the reducer shape. Every mutation is already one action, so it gains a
 network call without touching a component.
 
-### 5. Shifts and tip reports
+### 5. Shifts and tip reports — done (3C)
 
 Employees write their own `shifts`; managers correct and lock them. The database
 rejects overlapping shifts for one person outright (an exclusion constraint), so
 the client needs to surface that error rather than pre-empt it. `work_date` and
 `worked_minutes` are derived server-side — do not send them.
 
-### 6. Distribution
+### 6. Distribution — Phase 3D starts here
 
 The manager wizard calls `calculate_distribution(pool_id)` and then
 `send_distribution(distribution_id)`. The client-side

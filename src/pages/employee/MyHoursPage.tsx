@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { Card } from '@/components/ui/Card';
@@ -13,7 +13,12 @@ import { useI18n } from '@/hooks/useI18n';
 import { usePreviousShiftLabel, useShiftLabel } from '@/hooks/useShiftLabel';
 import { useToast } from '@/hooks/useToast';
 import { formatClock, workedMinutes } from '@/lib/time';
+import { SHIFT_FAILURE_KEY } from '@/shifts/errors';
+import { addDays } from '@/shifts/time';
+import { validateDraft, type Shift, type ShiftStatus } from '@/shifts/types';
+import { useOwnShifts } from '@/shifts/useShifts';
 import type { ShiftTimes } from '@/types';
+import type { StringKey } from '@/i18n/strings';
 import ui from '@/components/ui/ui.module.css';
 import styles from '@/pages/pages.module.css';
 
@@ -38,6 +43,14 @@ const MAX_BREAK_MINUTES = 180;
  */
 const FIRST_TOUCH = { start: 18 * 60, end: 22 * 60, break: 0 };
 
+/** The database's own enum, spelled the way a person reads it. */
+const STATUS_KEY: Record<ShiftStatus, StringKey> = {
+  draft: 'shStatusDraft',
+  submitted: 'shStatusSubmitted',
+  approved: 'shStatusApproved',
+  rejected: 'shStatusRejected',
+};
+
 /**
  * The employee enters their own working time here: start, end, break. The app
  * derives the effective hours; the manager reviews and locks.
@@ -51,15 +64,31 @@ function submittedAtNow(): string {
 export function MyHoursPage() {
   const state = useAppState();
   const dispatch = useAppDispatch();
-  const { t, num, dateFor, language } = useI18n();
+  const { t, num, dateFor, day, language } = useI18n();
   const shift = useShiftLabel();
   const previousShift = usePreviousShiftLabel();
   const { show } = useToast();
   const navigate = useNavigate();
 
+  // Real mode reads and writes Supabase; demo mode keeps the Phase 1 reducer.
+  const api = useOwnShifts();
+  const real = api.enabled;
+
   const employeeId = state.session.employeeId;
   const submission = state.submissions[employeeId];
-  const locked = Boolean(submission?.locked);
+
+  /** Which night is being entered. Real mode offers tonight or the one before. */
+  const [dayOffset, setDayOffset] = useState<0 | -1>(0);
+  const businessDate = api.businessDate ? addDays(api.businessDate, dayOffset) : null;
+
+  /** The shift already filed for that night, if any. */
+  const existing: Shift | null = useMemo(() => {
+    if (!real || !businessDate) return null;
+    return api.shifts.find((s) => s.workDate === businessDate) ?? null;
+  }, [real, businessDate, api.shifts]);
+
+  const locked = real ? Boolean(existing?.locked) : Boolean(submission?.locked);
+  const reviewed = real && existing?.status === 'approved';
 
   const [draft, setDraft] = useState<HoursDraft>(
     submission
@@ -72,6 +101,20 @@ export function MyHoursPage() {
   );
   const [field, setField] = useState<Field>('start');
 
+  // Seed the form from the filed shift when one arrives or the night changes.
+  useEffect(() => {
+    if (!real) return;
+    setDraft(
+      existing
+        ? {
+            startMinutes: existing.startMinutes,
+            endMinutes: existing.endMinutes,
+            breakMinutes: existing.breakMinutes,
+          }
+        : { startMinutes: null, endMinutes: null, breakMinutes: null },
+    );
+  }, [real, existing?.id, existing?.startMinutes, existing?.endMinutes, existing?.breakMinutes]);
+
   const complete = draft.startMinutes !== null && draft.endMinutes !== null;
   const times: ShiftTimes | null = complete
     ? {
@@ -83,8 +126,8 @@ export function MyHoursPage() {
   const effective = times ? workedMinutes(times) : null;
 
   const bump = (direction: 1 | -1) => {
-    if (locked) {
-      show(t('hoursLockedBody'));
+    if (locked || reviewed) {
+      show(t(reviewed ? 'shErrReviewed' : 'hoursLockedBody'));
       return;
     }
     setDraft((current) => {
@@ -148,19 +191,80 @@ export function MyHoursPage() {
     },
   ];
 
-  const log = state.distributions.slice(1, 5).map((distribution) => {
-    const times = distribution.hours[employeeId];
-    return {
-      id: distribution.id,
-      date: dateFor(distribution.dateKey, distribution.date).split(' · ')[0],
-      meta: times
-        ? `${formatClock(times.startMinutes)} – ${formatClock(times.endMinutes)} · ${t(
-            'breakT',
-          )} ${times.breakMinutes} ${t('minutesShort')}`
-        : t('missing'),
-      hours: times ? num(workedMinutes(times) / 60, 2) : '—',
-    };
-  });
+  /**
+   * Recent shifts. In real mode these are the rows the database returned, with
+   * the status it stores and the worked minutes it computed — the client never
+   * recalculates either.
+   */
+  const log = real
+    ? api.shifts.slice(0, 6).map((entry) => ({
+        id: entry.id,
+        date: day(new Date(`${entry.workDate}T12:00:00`)),
+        meta: `${formatClock(entry.startMinutes)} – ${formatClock(entry.endMinutes)} · ${t(
+          'breakT',
+        )} ${entry.breakMinutes} ${t('minutesShort')} · ${t(STATUS_KEY[entry.status])}`,
+        hours: num(entry.workedMinutes / 60, 2),
+        status: t(STATUS_KEY[entry.status]),
+        statusColor:
+          entry.status === 'approved'
+            ? 'var(--color-money)'
+            : entry.status === 'rejected'
+              ? 'var(--color-text-subtle)'
+              : 'var(--color-accent)',
+      }))
+    : state.distributions.slice(1, 5).map((distribution) => {
+        const times = distribution.hours[employeeId];
+        return {
+          id: distribution.id,
+          date: dateFor(distribution.dateKey, distribution.date).split(' · ')[0],
+          meta: times
+            ? `${formatClock(times.startMinutes)} – ${formatClock(times.endMinutes)} · ${t(
+                'breakT',
+              )} ${times.breakMinutes} ${t('minutesShort')}`
+            : t('missing'),
+          hours: times ? num(workedMinutes(times) / 60, 2) : '—',
+          status: undefined as string | undefined,
+          statusColor: undefined as string | undefined,
+        };
+      });
+
+  /** Send the shift. Validation first, so a round trip is not wasted on 24:00. */
+  const sendShift = async () => {
+    const verdict = validateDraft(draft);
+    if (!verdict.ok) {
+      const key: StringKey =
+        verdict.reason === 'breakTooLong'
+          ? 'shErrBreak'
+          : verdict.reason === 'tooLong'
+            ? 'shErrTooLong'
+            : verdict.reason === 'tooShort'
+              ? 'shErrRange'
+              : 'myHoursBody';
+      show(t(key));
+      return;
+    }
+    if (!businessDate) {
+      show(t('shErrNoMembership'));
+      return;
+    }
+
+    const result = await api.submit(
+      {
+        businessDate,
+        startMinutes: draft.startMinutes as number,
+        endMinutes: draft.endMinutes as number,
+        breakMinutes: draft.breakMinutes ?? 0,
+      },
+      existing?.id,
+    );
+
+    if (!result.ok) {
+      show(t(SHIFT_FAILURE_KEY[result.failure ?? 'unknown']));
+      return;
+    }
+    show(t('hoursSent'));
+    navigate('/home');
+  };
 
   return (
     <Screen
@@ -169,14 +273,22 @@ export function MyHoursPage() {
       back={false}
       aboveTabs
       cta={
-        locked
+        locked || reviewed
           ? { label: t('requestChange'), onClick: () => show(t('changeRequested')) }
           : {
-              label: submission ? t('hoursUpdate') : t('hoursSubmit'),
-              muted: !times,
+              label: api.busy
+                ? t('shSaving')
+                : (real ? existing : submission)
+                  ? t('hoursUpdate')
+                  : t('hoursSubmit'),
+              muted: !times || api.busy,
               onClick: () => {
                 if (!times) {
                   show(t('myHoursBody'));
+                  return;
+                }
+                if (real) {
+                  void sendShift();
                   return;
                 }
                 dispatch({ type: 'submitOwnHours', employeeId, times, at: submittedAtNow() });
@@ -188,20 +300,35 @@ export function MyHoursPage() {
     >
       <Lede>{t('myHoursBody')}</Lede>
 
+      {/* Same control, real nights. Yesterday is selectable in real mode
+          because submitting last night's hours in the morning is normal. */}
       <SegmentedControl
         label={t('pickShift')}
-        value="sat22"
-        options={[
-          { value: 'sat22', label: shift.short },
-          {
-            value: 'fri21',
-            label: previousShift,
-            disabledReason:
-              language === 'Deutsch' ? 'Ältere Schichten sind abgeschlossen' : 'Earlier shifts are closed',
-          },
-        ]}
-        onChange={(_value, option) => {
-          if (option.disabledReason) show(option.disabledReason);
+        value={real ? (dayOffset === 0 ? 'today' : 'yesterday') : 'sat22'}
+        options={
+          real
+            ? [
+                { value: 'today', label: t('shTonight') },
+                { value: 'yesterday', label: t('shYesterday') },
+              ]
+            : [
+                { value: 'sat22', label: shift.short },
+                {
+                  value: 'fri21',
+                  label: previousShift,
+                  disabledReason:
+                    language === 'Deutsch'
+                      ? 'Ältere Schichten sind abgeschlossen'
+                      : 'Earlier shifts are closed',
+                },
+              ]
+        }
+        onChange={(value, option) => {
+          if (option.disabledReason) {
+            show(option.disabledReason);
+            return;
+          }
+          if (real) setDayOffset(value === 'today' ? 0 : -1);
         }}
       />
 
@@ -285,7 +412,15 @@ export function MyHoursPage() {
                 color: locked ? 'var(--color-text-secondary)' : 'var(--color-accent)',
               }}
             >
-              {locked ? t('hoursLocked') : submission ? t('hoursUnlocked') : t('notSubmitted')}
+              {locked
+                ? t('hoursLocked')
+                : real
+                  ? existing
+                    ? t(STATUS_KEY[existing.status])
+                    : t('notSubmitted')
+                  : submission
+                    ? t('hoursUnlocked')
+                    : t('notSubmitted')}
             </p>
             <p className={ui.note} style={{ marginTop: 2 }}>
               {locked ? t('hoursLockedBody') : t('myHoursBody')}
@@ -296,12 +431,16 @@ export function MyHoursPage() {
 
       <div className={ui.stackFlush}>
         <SectionLabel>{t('recent')}</SectionLabel>
-        {log.length === 0 ? <EmptyState title={t('emptyShifts')} /> : null}
+        {real && api.status === 'loading' ? <EmptyState title={t('shLoading')} /> : null}
+        {log.length === 0 && !(real && api.status === 'loading') ? (
+          <EmptyState title={t('emptyShifts')} />
+        ) : null}
         {log.map((entry) => (
           <ListRow
             key={entry.id}
             title={entry.date}
             meta={entry.meta}
+            metaColor={entry.statusColor}
             trailing={
               <span className="tabular" style={{ fontSize: 16, fontWeight: 500 }}>
                 {entry.hours}

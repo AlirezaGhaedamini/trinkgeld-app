@@ -37,8 +37,14 @@ workplace is resolved from them, and the manager/employee split is read from the
 active `workplace_members` row — never from local state, local storage or a
 query string.
 
-**Phase 3C — shifts, pools and distributions.** Still on the local mock data;
-that is the next phase (see `NEXT_STEPS.md`).
+**Phase 3C — shifts, hours review and tip reports. Complete.** An employee
+submits real shifts (overnight included, in the workplace's own timezone), sees
+their real status, and files real tip reports in integer cents. A manager
+reviews, corrects and approves them. `src/shifts/` and `src/tips/` are the data
+layers; every worked minute and business date is computed by the database.
+
+**Phase 3D — pools and distributions.** Still on the local mock data; that is
+the next phase (see `NEXT_STEPS.md`).
 
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
@@ -310,6 +316,7 @@ Nothing writes a membership directly. Creation and joining go through the Phase
 ```bash
 node scripts/rls-check.mjs         # Phase 3A: profile isolation
 node scripts/workplace-check.mjs   # Phase 3B: membership, invitations, promotion attempts
+node scripts/shifts-check.mjs      # Phase 3C: shifts, review columns, tip reports
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test

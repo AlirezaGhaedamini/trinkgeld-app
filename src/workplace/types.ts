@@ -16,6 +16,8 @@ export interface WorkplaceSummary {
   city: string | null;
   timezone: string;
   currency: string;
+  /** Local hour a business day starts. A 01:00 shift belongs to the night before. */
+  businessDayStartHour: number;
   /** Null for members: only a manager's own workplace row exposes it usefully. */
   joinCode: string | null;
 }
@@ -39,6 +41,7 @@ export function toWorkplaceSummary(row: Tables<'workplaces'>): WorkplaceSummary 
     city: row.city,
     timezone: row.timezone,
     currency: row.currency,
+    businessDayStartHour: row.business_day_start_hour,
     joinCode: row.join_code,
   };
 }
