@@ -1,18 +1,34 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useRef, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { ChipGroup } from '@/components/ui/ChipGroup';
-import { Note } from '@/components/ui/Note';
+import { InfoNote, Note } from '@/components/ui/Note';
+import { AUTH_FAILURE_KEY } from '@/auth/errors';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
+import { useAuth, useRealAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import type { UserRole } from '@/types';
 import ui from '@/components/ui/ui.module.css';
 
-/** Create an account. Every field starts empty and is typed by the user. */
+/**
+ * Create an account. Every field starts empty and is typed by the user.
+ *
+ * The name is handed to Supabase as user metadata, which is where
+ * `app.handle_new_user()` reads it from when it creates the profile row. The
+ * browser never inserts into `public.profiles` — it has no policy to do so, by
+ * design.
+ *
+ * If the project has email confirmation switched on, sign-up returns a user but
+ * no session; the screen then says so and waits, rather than pretending the
+ * account is ready. Supabase deliberately returns the same shape for an address
+ * that is already registered, so this path leaks nothing either way.
+ */
 export function SignUpPage() {
   const { session } = useAppState();
   const dispatch = useAppDispatch();
+  const auth = useAuth();
+  const real = useRealAuth();
   const { t } = useI18n();
   const { show } = useToast();
   const navigate = useNavigate();
@@ -20,26 +36,68 @@ export function SignUpPage() {
   const [name, setName] = useState(session.accountName);
   const [email, setEmail] = useState(session.accountEmail);
   const [password, setPassword] = useState('');
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
 
-  const ready = name.trim().length > 0 && email.trim().length > 0;
+  // Sign-up finishes with a live session and then continues to the workplace
+  // step, so this screen cannot be behind a blanket "already signed in" guard.
+  // It turns away someone who arrived here with a session instead.
+  const ownSession = useRef(false);
+  const arrivedSignedIn = real && auth.status === 'signedIn' && !ownSession.current;
+
+  const named = name.trim().length > 0 && email.trim().length > 0;
+  const ready = real ? named && password.length > 0 : named;
+
+  const submit = async () => {
+    if (auth.busy) return;
+    if (!named) {
+      show(t('needName'));
+      return;
+    }
+    if (real && password.length === 0) {
+      show(t('authNeedPassword'));
+      return;
+    }
+
+    if (!real) {
+      dispatch({ type: 'signIn', role: session.role, name: name.trim(), email: email.trim() });
+      navigate('/join');
+      return;
+    }
+
+    ownSession.current = true;
+    const result = await auth.signUp(name.trim(), email.trim(), password);
+    if (!result.ok) {
+      ownSession.current = false;
+      show(t(AUTH_FAILURE_KEY[result.failure ?? 'unknown']));
+      return;
+    }
+
+    if (result.needsEmailConfirmation) {
+      setPassword('');
+      setAwaitingConfirmation(true);
+      return;
+    }
+
+    // Signed in already: the workplace step is next, exactly as before.
+    navigate('/join');
+  };
+
+  if (arrivedSignedIn) return <Navigate to="/" replace />;
 
   return (
     <Screen
       title={t('signUp')}
       cta={{
-        label: t('continue'),
-        muted: !ready,
+        label: auth.busy ? t('authCreating') : t('continue'),
+        muted: !ready || auth.busy,
         onClick: () => {
-          if (!ready) {
-            show(t('needName'));
-            return;
-          }
-          dispatch({ type: 'signIn', role: session.role, name: name.trim(), email: email.trim() });
-          navigate('/join');
+          void submit();
         },
       }}
     >
       <div className={ui.stackTight}>
+        {awaitingConfirmation ? <InfoNote icon="paper-plane-tilt">{t('authCheckInboxBody')}</InfoNote> : null}
+
         <div>
           <label className={ui.fieldLabel} htmlFor="signup-name">
             {t('nameLabel')}

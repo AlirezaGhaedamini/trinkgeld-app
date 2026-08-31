@@ -289,6 +289,23 @@ export const EN = {
   needEmail: "Enter your email and password",
   needName: "Enter your name and email",
   joinCodePrompt: "Type the code",
+  // — authentication —
+  authRestoring: "Signing you back in\u2026",
+  authSigningIn: "Signing in\u2026",
+  authCreating: "Creating your account\u2026",
+  authNeedPassword: "Enter a password",
+  authInvalid: "That email and password do not match an account.",
+  authEmailTaken: "There is already an account with that email. Try signing in.",
+  authWeakPassword: "Use at least 8 characters, with a number or a symbol.",
+  authInvalidEmail: "That does not look like a valid email address.",
+  authNotConfirmed: "Confirm your email address first \u2014 check your inbox.",
+  authRateLimited: "Too many attempts. Wait a minute and try again.",
+  authNetwork: "No connection. Check your network and try again.",
+  authNotConfigured: "Sign-in is not set up on this device yet.",
+  authUnknown: "Something went wrong. Please try again.",
+  authCheckInbox: "Almost there",
+  authCheckInboxBody: "We sent a confirmation link to your email. Open it, then sign in.",
+  authSignedOut: "Signed out",
 } as const;
 
 export type StringKey = keyof typeof EN;
@@ -574,6 +591,23 @@ export const DE: Record<StringKey, string> = {
   needEmail: "E-Mail und Passwort eingeben",
   needName: "Name und E-Mail eingeben",
   joinCodePrompt: "Code eingeben",
+  // — Anmeldung —
+  authRestoring: "Du wirst wieder angemeldet\u2026",
+  authSigningIn: "Anmeldung l\u00e4uft\u2026",
+  authCreating: "Konto wird erstellt\u2026",
+  authNeedPassword: "Passwort eingeben",
+  authInvalid: "E-Mail und Passwort passen zu keinem Konto.",
+  authEmailTaken: "Mit dieser E-Mail gibt es bereits ein Konto. Melde dich an.",
+  authWeakPassword: "Mindestens 8 Zeichen, mit einer Zahl oder einem Sonderzeichen.",
+  authInvalidEmail: "Das sieht nicht nach einer g\u00fcltigen E-Mail-Adresse aus.",
+  authNotConfirmed: "Best\u00e4tige zuerst deine E-Mail-Adresse \u2014 schau in dein Postfach.",
+  authRateLimited: "Zu viele Versuche. Warte kurz und probiere es erneut.",
+  authNetwork: "Keine Verbindung. Pr\u00fcfe dein Netzwerk und versuche es erneut.",
+  authNotConfigured: "Die Anmeldung ist auf diesem Ger\u00e4t noch nicht eingerichtet.",
+  authUnknown: "Da ist etwas schiefgelaufen. Bitte versuche es erneut.",
+  authCheckInbox: "Fast geschafft",
+  authCheckInboxBody: "Wir haben dir einen Best\u00e4tigungslink geschickt. \u00d6ffne ihn und melde dich dann an.",
+  authSignedOut: "Abgemeldet",
 };
 
 export const DICTIONARIES = { English: EN, Deutsch: DE } as const;

@@ -1,6 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { HomeRedirect, RequireManager, RequireSession } from '@/components/layout/guards';
+import {
+  HomeRedirect,
+  RequireManager,
+  RequireNoSession,
+  RequireSession,
+} from '@/components/layout/guards';
 
 import { SignInPage } from '@/pages/auth/SignInPage';
 import { SignUpPage } from '@/pages/auth/SignUpPage';
@@ -41,8 +46,20 @@ export function AppRoutes() {
       <Route path="/" element={<HomeRedirect />} />
 
       {/* ── unauthenticated ─────────────────────────────────────────────── */}
+      {/* Signing in while already signed in makes no sense: bounce to the app. */}
+      <Route element={<RequireNoSession />}>
+        <Route element={<AppLayout />}>
+          <Route path="/signin" element={<SignInPage />} />
+        </Route>
+      </Route>
+
+      {/*
+        Sign-up and the workplace step are NOT wrapped: sign-up ends with a live
+        session and then continues to /join, so a blanket "already signed in?
+        go to the app" guard here would skip the workplace step entirely.
+        SignUpPage turns an unrelated visitor away itself.
+      */}
       <Route element={<AppLayout />}>
-        <Route path="/signin" element={<SignInPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/join" element={<JoinWorkplacePage />} />
       </Route>

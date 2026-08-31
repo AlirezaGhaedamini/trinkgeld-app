@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { Note } from '@/components/ui/Note';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
+import { useAuth, useRealAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { workedMinutes } from '@/lib/time';
@@ -30,6 +31,23 @@ export function ProfilePage() {
   const { t, num, language, area } = useI18n();
   const { show } = useToast();
   const navigate = useNavigate();
+  const auth = useAuth();
+  const real = useRealAuth();
+
+  /**
+   * Sign out of Supabase first, then clear the local state.
+   *
+   * Order matters: ending the server session is the part that actually revokes
+   * anything, and it has to happen even if the person closes the app straight
+   * afterwards. The local reset and the redirect follow regardless of whether
+   * the network call succeeded, so nobody is ever left looking at a signed-in
+   * screen they cannot leave.
+   */
+  const signOut = async () => {
+    if (real) await auth.signOut();
+    dispatch({ type: 'signOut' });
+    navigate('/signin', { replace: true });
+  };
 
   const employee = state.employees.find((e) => e.id === state.session.employeeId);
   const submission = state.submissions[state.session.employeeId];
@@ -119,9 +137,9 @@ export function ProfilePage() {
         variant="secondary"
         quiet
         block
+        disabled={auth.busy}
         onClick={() => {
-          dispatch({ type: 'signOut' });
-          navigate('/signin', { replace: true });
+          void signOut();
         }}
       >
         {t('signOut')}

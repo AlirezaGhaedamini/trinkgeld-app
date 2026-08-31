@@ -5,7 +5,9 @@ import { BrandMark } from '@/components/brand/BrandMark';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { AUTH_FAILURE_KEY } from '@/auth/errors';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
+import { useAuth, useRealAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import type { UserRole } from '@/types';
@@ -15,14 +17,21 @@ import styles from '@/pages/pages.module.css';
 /**
  * Sign in.
  *
- * The fields start empty and are really typed into — nothing is pre-filled. No
- * credentials are checked yet: signing in creates the local account and, on an
- * empty install, the first roster entry. Supabase auth replaces the submit
- * handler and nothing else on this screen.
+ * The screen is unchanged from the approved design; only the submit handler
+ * does real work now. With credentials configured it goes to Supabase Auth —
+ * the app never checks a password itself and never stores one. With the demo
+ * dataset loaded, or on a machine with no `.env.local`, it falls back to the
+ * local sign-in so the prototype still runs.
+ *
+ * On failure the person sees one of a fixed set of translated messages. The
+ * wording never distinguishes "no such account" from "wrong password", because
+ * that difference is an account-enumeration oracle.
  */
 export function SignInPage() {
   const { session, dataMode } = useAppState();
   const dispatch = useAppDispatch();
+  const auth = useAuth();
+  const real = useRealAuth();
   const { t } = useI18n();
   const { show } = useToast();
   const navigate = useNavigate();
@@ -35,20 +44,41 @@ export function SignInPage() {
   // one of the two demo accounts.
   const ready = demo || (email.trim().length > 0 && password.length > 0);
 
-  const submit = () => {
+  const goHome = () => {
+    navigate(session.role === 'manager' ? '/manager' : '/home', { replace: true });
+  };
+
+  const submit = async () => {
+    if (auth.busy) return;
     if (!ready) {
       show(t('needEmail'));
       return;
     }
-    dispatch({ type: 'signIn', role: session.role, email: email.trim() });
-    navigate(session.role === 'manager' ? '/manager' : '/home', { replace: true });
+
+    if (!real) {
+      dispatch({ type: 'signIn', role: session.role, email: email.trim() });
+      goHome();
+      return;
+    }
+
+    const result = await auth.signIn(email.trim(), password);
+    if (!result.ok) {
+      show(t(AUTH_FAILURE_KEY[result.failure ?? 'unknown']));
+      setPassword('');
+      return;
+    }
+    // AuthBridge hands the identity to the local state; the guard holds the
+    // route for the frame that takes.
+    goHome();
   };
 
-  const label = demo
-    ? session.role === 'manager'
-      ? t('signInMgr')
-      : t('signInEmp')
-    : t('continue');
+  const label = auth.busy
+    ? t('authSigningIn')
+    : demo
+      ? session.role === 'manager'
+        ? t('signInMgr')
+        : t('signInEmp')
+      : t('continue');
 
   return (
     <Screen back={false} center>
@@ -63,7 +93,7 @@ export function SignInPage() {
           className={ui.stackTight}
           onSubmit={(event) => {
             event.preventDefault();
-            submit();
+            void submit();
           }}
         >
           <div>
@@ -98,10 +128,15 @@ export function SignInPage() {
               <Icon name="eye" size={19} color="var(--color-text-muted)" />
             </div>
           </div>
-          <Button type="submit" block muted={!ready}>
+          <Button type="submit" block muted={!ready} disabled={auth.busy} aria-busy={auth.busy}>
             {label}
           </Button>
-          <Button variant="secondary" block onClick={() => navigate('/signup')}>
+          <Button
+            variant="secondary"
+            block
+            disabled={auth.busy}
+            onClick={() => navigate('/signup')}
+          >
             {t('createAcc')}
           </Button>
         </form>
