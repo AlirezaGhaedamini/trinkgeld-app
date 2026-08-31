@@ -42,3 +42,7 @@ coverage/
 # future native shells (Capacitor)
 /android/
 /ios/
+
+# supabase cli local state (never the migrations)
+supabase/.temp/
+supabase/.branches/

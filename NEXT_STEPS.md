@@ -3,180 +3,172 @@
 Where the project is and what comes next, in the order it should be built. Each
 step assumes the one before it.
 
-Current state: **step 1 is ready for your review.** The frontend is complete on
-mock data; nothing is persisted.
+**Current state.** Phase 1 (frontend on mock data) and Phase 2 (the Supabase
+schema) are both complete. Nothing connects them yet: the app still reads local
+state, and the database has never been applied to a real Supabase project.
+Phase 3 is the wiring.
 
 ---
 
-## 1. Frontend validation — *do this first*
+## Done
 
-Click through both roles on a real phone before any backend work starts. Do it
-twice: once on the empty state (what a new customer sees) and once with the demo
-data switched on (what a working shift looks like).
+**Phase 1 — frontend.** Every prototype screen is a real route, both roles work
+end to end, the calculation is live, and the app starts empty with demo data
+available on request.
 
-- Does every screen still look like `TipCrew Prototype.html`?
-- Does the employee flow make sense end to end: enter hours → report tips →
-  see the share → confirm it?
-- Does the manager flow: reports → pool → areas → hours → result → send?
-- Is the wording right in German as well as English?
-- Anything missing that the business actually needs?
+**Phase 2 — backend.** `supabase/migrations/` holds 13 ordered migrations: 16
+tables, 16 enums, 44 RLS policies, the distribution engine as PostgreSQL
+functions, hashed invitation tokens, an append-only audit log, and a two-view
+member read layer. Applied and exercised against a real PostgreSQL 16 instance
+via `supabase/tests/rebuild.sh --test` — 85 assertions, including all 18 security
+scenarios. Documented in [`docs/BACKEND.md`](docs/BACKEND.md).
 
-Fixing wording, ordering and rules is cheap now and expensive once there is a
-database schema and live data behind it.
+The open product questions that used to sit at the bottom of this file were
+answered during the architecture review and are now settled in the schema:
+rounding goes to a configurable `rounding_area_id`; overlap is measured against
+the longest shift, with the alternative strategies present in the enum; the
+business day starts at a configurable hour, default 05:00, with the timezone
+stored per workplace; retention is a per-workplace `retention_years`, default 7.
+Payout tracking was deliberately left out of scope.
 
-## 2. Supabase project setup
+---
 
-Create the project, note the URL and anon key, put them in `.env.local`
-(`.env.example` shows the names). Add `@supabase/supabase-js` and a single
-client module in `src/lib/supabase.ts`. Nothing else changes yet.
+## Phase 3 — connect the frontend
 
-## 3. Database schema
+### 1. Create the Supabase project and apply the schema
 
-Mirror `src/types/index.ts`:
+```bash
+cp .env.example .env.local        # fill in URL + anon key
+npm install                       # picks up @supabase/supabase-js
+supabase login
+supabase link --project-ref <your-project-ref>
+supabase db push
+supabase gen types typescript --linked > src/types/database.ts
+```
 
-`workplaces`, `profiles`, `employees` (workplace membership + area + role +
-multiplier), `roles`, `shifts`, `tip_reports`, `tip_pools`,
-`distribution_rules`, `tip_distributions`, `tip_distribution_entries`.
+Regenerating the types is not optional — `src/types/database.ts` in the
+repository was produced by introspecting the same migrations locally, and the
+CLI output is the canonical form.
 
-Money in integer cents. Shift times as minutes-from-midnight plus a date, exactly
-as the frontend already models them — do not switch to timestamps without
-re-checking the overlap logic.
+Then check in the dashboard that RLS is enabled on all 16 tables and that the
+anon role can read nothing.
 
-## 4. Authentication
+### 2. Authentication
 
-Supabase Auth with email + password. Replace the submit handler in
-`SignInPage`/`SignUpPage`; the rest of the screen stays. Add a session listener
-that fills `state.session` and drop `RequireSession`'s mock check.
+Supabase Auth with email + password. Replace the submit handlers in
+`SignInPage` / `SignUpPage`; the screens stay as they are. Add a session
+listener that fills `state.session` and drop `RequireSession`'s mock check.
+`app.handle_new_user()` creates the `profiles` row automatically — the client
+does not insert it.
 
-## 5. User profiles
+### 3. Workplace onboarding
 
-`profiles` row per auth user; name, language preference, avatar later. Move the
-language choice out of `localStorage` and onto the profile once it exists.
+`create_workplace()` returns the new workplace id and seeds six areas, eleven
+roles and a draft rule. `request_join()` / `approve_join_request()` back the
+join-code flow, `create_invitation()` / `accept_invitation()` back the invite
+flow. The invitation token is returned **once** by `create_invitation()` — show
+it immediately, because it is only stored hashed.
 
-## 6. Workplace structure
+This also closes the two known gaps in the empty state: a workplace now has a
+real name, and a manager can build a roster before anyone signs in, because
+`workplace_members.user_id` is nullable.
 
-Create a workplace, generate a join code, join by code, approve a request. The
-join screen and the invite screen already exist for this.
+### 4. Replace `src/data/` with queries
 
-## 7. Manager role
+`src/data/` is the seam. Manager screens read the base tables; employee screens
+read `member_distributions` and `member_distribution_entries` — never the base
+distribution tables, which they have no policy for.
 
-Row-level security: only a workplace's managers may write
-`distribution_rules`, `employees`, and other people's `shifts`.
+Keep the reducer shape. Every mutation is already one action, so it gains a
+network call without touching a component.
 
-## 8. Employee role
+### 5. Shifts and tip reports
 
-Employees may read their own workplace, write their own `shifts` and
-`tip_reports`, and read their own distribution entries — nothing else. Prove the
-policies with a second test account, not by trusting the client guard.
+Employees write their own `shifts`; managers correct and lock them. The database
+rejects overlapping shifts for one person outright (an exclusion constraint), so
+the client needs to surface that error rather than pre-empt it. `work_date` and
+`worked_minutes` are derived server-side — do not send them.
 
-## 9. Shift persistence
+### 6. Distribution
 
-Employees submit hours to `shifts`; managers correct, lock and unlock. The lock
-flag already drives the UI.
+The manager wizard calls `calculate_distribution(pool_id)` and then
+`send_distribution(distribution_id)`. The client-side
+`calculateDistribution()` in `src/lib/distribution.ts` stops being the source of
+truth and becomes a live preview inside the wizard.
 
-## 10. Working-hour calculation
+Add a **parity test**: the same inputs through the TypeScript engine and the SQL
+engine must produce identical cents. When they disagree, the database wins.
 
-Move `workedMinutes` into a generated column or a database function so the
-server and the client can never disagree.
+### 7. Employee confirmation
 
-## 11. Shift-overlap engine
+`acknowledge_entry()` handles confirm and query. Entries carry `ack_status`, so
+the manager's "waiting for confirmation" count is a query, not a client tally.
 
-Port `groupByOverlap` to SQL (or a Postgres function). It is the rule people
-will argue about, so it must be computed once, server-side, and stored with the
-distribution.
+### 8. Realtime
 
-## 12. Tip pool management
+Subscribe to `tip_distribution_entries` so a sent distribution appears on an
+employee's phone without a refresh.
 
-Persist `tip_reports` and `tip_pools`. The manager's "take these amounts" action
-becomes a real write.
+---
 
-## 13. Distribution rules
+## Phase 4 — hardening
 
-Persist `distribution_rules` per workplace: area shares, method, minimum
-overlap, acknowledgement required, rounding area.
-
-## 14. Tip calculation engine
-
-Port `calculateDistribution` server-side and store the result as
-`tip_distribution_entries`, together with a **snapshot** of the hours and the
-staff points used. Historical distributions must never change when someone's
-role changes later — the frontend already models this with the `hours` and
-`staff` snapshots on a distribution.
-
-Decide the rounding rule explicitly here: the sum of the entries must equal the
-pool to the cent, with the remainder going to the configured area.
-
-## 15. Historical distributions
-
-Read the stored entries instead of recalculating. Add export (CSV) — the profile
-screen already offers it.
-
-## 16. Manager analytics
-
-Weekly and monthly totals, per-area and per-person trends, unconfirmed shares.
-The overview and history screens have the shapes already.
-
-## 17. Testing
+### 9. Testing
 
 - Unit tests for `lib/time.ts` and `lib/distribution.ts` — the overlap edge
-  cases and the units maths are the highest-value tests in the project.
-- A parity test that the SQL engine and the TypeScript engine agree on the same
-  inputs.
+  cases and the units maths are the highest-value tests in the frontend.
+- The engine parity test from step 6.
 - Component tests for the wizard.
-- End-to-end: sign in as each role and walk the two main flows.
+- End-to-end: sign in as each role and walk both flows.
 
-Vitest + Testing Library, or Playwright for the end-to-end pass.
+Vitest + Testing Library, Playwright for end-to-end. The SQL side already has
+its own suite in `supabase/tests/`; keep adding to it whenever a policy changes.
 
-## 18. Capacitor setup
+### 10. Analytics and export
+
+Weekly and monthly totals, per-area and per-person trends, unconfirmed shares.
+CSV export from the stored entries — the profile screen already offers it.
+
+### 11. Retention
+
+`workplaces.retention_years` is recorded but nothing enforces it. Needs a
+scheduled job (pg_cron or an Edge Function) that anonymises or removes
+distributions past the horizon.
+
+---
+
+## Phase 5 — native and production
+
+### 12. Capacitor
 
 `@capacitor/core`, `@capacitor/cli`, `npx cap init`, `npx cap add ios android`.
 The web build should work unchanged; check safe areas, the keyboard, and that
 hash routing behaves inside the WebView.
 
-## 19. iOS build
+### 13. iOS
 
 Xcode, signing, app icon from `src/assets/brand/tipcrew-logo.svg`, splash
 screen, TestFlight.
 
-## 20. Android build
+### 14. Android
 
 Android Studio, signing key, Play Console internal testing track.
 
-## 21. Production deployment
+### 15. Production deployment
 
-Web on a static host (Netlify, Vercel, Cloudflare Pages). Supabase production
-project separate from development. Backups, and a migration process for the
-schema.
+Web on a static host (Netlify, Vercel, Cloudflare Pages). A production Supabase
+project separate from development, with the same migrations applied through
+`supabase db push` — never by hand. Backups on.
 
 ---
 
-## Known gaps in the empty state
+## Still open
 
-Two things a real first-run needs that the prototype never had a screen for, so
-they are not built yet — both belong with the backend rather than ahead of it:
-
-- **Naming the workplace.** A manager who sets one up cannot give it a name; the
-  screens say "Your workplace" until then. Needs one field, either on the set-up
-  card or in a workplace-settings screen.
-- **Adding a team member directly.** Today the only route in is the invite code,
-  which needs a backend to resolve. Until then a manager starting from empty
-  cannot build a roster, so the full distribution flow can only be exercised with
-  the demo data loaded.
-
-## Open product questions
-
-Worth deciding before step 3, because they change the schema:
-
-- **Rounding.** Who gets the leftover cents? The UI says Service; confirm.
-- **Management.** Excluded from the pool by default — always, or configurable
-  per workplace?
-- **Overlap anchor.** Today the anchor is the longest shift of the night. Should
-  overlap instead be measured pairwise, or against a fixed service window?
-- **Time zones and dates.** A shift that ends at 03:00 belongs to the previous
-  day. Confirm the cut-off hour with a real venue.
-- **Payout.** "With salary" is a label today. Does TipCrew ever need to record
-  that a payout happened, and who confirms it?
-- **Retention.** The profile screen promises seven years. Confirm against the
-  actual legal requirement in each market.
-- **Legal.** Tip distribution is regulated differently per country (Germany,
-  Netherlands, Austria). Worth checking before selling into a second market.
+- **Peer visibility.** The schema supports `none` / `area` / `workplace`; the
+  MVP ships `none` and no screen exposes the setting yet.
+- **Multi-manager approval.** Statuses are extensible enough for a
+  `pending_approval` step, but the MVP is single-manager send.
+- **Payout tracking.** Out of scope by decision. If it comes back, it is a new
+  table, not a column on a distribution.
+- **The other overlap strategies.** `pairwise` and `service_window` exist in the
+  enum and in the rule columns; neither is implemented in the engine.

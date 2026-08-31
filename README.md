@@ -14,11 +14,20 @@ the *fair distribution* of tips inside a hospitality team.
 
 ## Project status
 
-**Phase 1 — frontend.** The whole app runs on mock data and local state. Every
-screen from the original prototype is a real route, every interaction works, and
-the tip calculation is live: change the pool, the hours, the percentages or the
-rules and the numbers update. There is no backend yet; Supabase comes next (see
-`NEXT_STEPS.md`).
+**Phase 1 — frontend. Complete.** The whole app runs on mock data and local
+state. Every screen from the original prototype is a real route, every
+interaction works, and the tip calculation is live: change the pool, the hours,
+the percentages or the rules and the numbers update.
+
+**Phase 2 — backend. Complete, not yet connected.** The full Supabase schema
+lives in `supabase/migrations/` — 16 tables, 16 enums, 44 RLS policies, the
+distribution engine as PostgreSQL functions, and a member read layer that keeps
+employees out of manager-only tables. It has been applied and exercised against
+a real PostgreSQL 16 instance (`supabase/tests/rebuild.sh --test`, 85
+assertions). See **[`docs/BACKEND.md`](docs/BACKEND.md)**.
+
+**Phase 3 — wiring.** The React screens still read the local mock state. Nothing
+in the app talks to Supabase yet; that is the next phase (see `NEXT_STEPS.md`).
 
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
@@ -85,7 +94,12 @@ src/
     manager/       overview, the four-step wizard, team, rules, distributions
   state/           reducer, context, selectors
   styles/          tokens.css, base.css, fonts.css, phosphor.css
-  types/           the domain model
+  types/           the domain model + database.ts (generated from the schema)
+supabase/
+  migrations/      13 ordered SQL migrations — the whole backend
+  tests/           local PostgreSQL harness and the security assertion suite
+docs/
+  BACKEND.md       schema, RLS model, engine, migration workflow
 ```
 
 Rules of thumb: `lib/` is pure and testable, `data/` is replaceable by Supabase
@@ -231,19 +245,41 @@ Mobile is the primary target, not an adaptation.
 
 ---
 
-## Future: Supabase
+## Backend
 
-Nothing is wired up yet, and no keys are in the repository. The shape is ready:
+The database is in `supabase/migrations/` and documented in
+[`docs/BACKEND.md`](docs/BACKEND.md). Short version:
 
-- Every type in `src/types/` is row-shaped — string `id`, `<entity>Id` foreign
-  keys, ISO timestamps.
-- Every mutation is an action in one reducer (`src/state/appReducer.ts`), so a
-  mutation gains a network call without touching a component.
-- `src/data/` is the seam: replace those modules with queries.
-- Manager/employee separation already exists in the client and maps directly
-  onto row-level security policies.
+- Money is stored as integer cents; points and percentages as `numeric`, never
+  float.
+- A distribution rule is a **version**. Activating one freezes the role points
+  into the rule, so editing a role next month cannot change last month's payout.
+- Every distribution snapshots its inputs and every entry snapshots the name,
+  area, role, points and multiplier actually used.
+- `tip_distribution_entries` is unique on `(distribution_id, member_id,
+  area_id)` — someone who worked Bar and then Service on the same day gets two
+  entries, never one blended row.
+- Employees have no read access to `tip_pools` or `tip_distributions`. They read
+  `member_distributions` and `member_distribution_entries`, which mask the pool
+  total unless the workplace releases it.
 
-Copy `.env.example` to `.env.local` when the time comes. `.env*` is git-ignored.
+### Connecting a project
+
+```bash
+cp .env.example .env.local     # then fill in the two values
+supabase login
+supabase link --project-ref <your-project-ref>
+supabase db push
+supabase gen types typescript --linked > src/types/database.ts
+```
+
+Use the **anon** key in `.env.local`. The service-role key bypasses row-level
+security and must never appear in this repository or in any `VITE_` variable.
+`.env` and `.env.*` are git-ignored; `.env.example` is the only exception and
+holds no real values.
+
+`src/lib/supabase.ts` creates the typed client. It is not called by any screen
+yet — that is Phase 3.
 
 ## Future: Capacitor
 

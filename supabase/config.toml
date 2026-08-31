@@ -1,0 +1,15 @@
+# Supabase CLI configuration.
+#
+# `project_id` names the local stack; it is not a secret. The remote project is
+# bound separately with:
+#
+#   supabase link --project-ref <your-project-ref>
+#
+# which writes the reference into supabase/.temp/ (gitignored).
+
+project_id = "tipcrew"
+
+[db]
+# Match the linked project so local runs behave identically. The migrations in
+# this repository were developed and tested against PostgreSQL 16.
+major_version = 15
