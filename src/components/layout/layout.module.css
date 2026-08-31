@@ -1,0 +1,332 @@
+/*
+ * App chrome: the phone-sized frame, the header, the scrolling body, the
+ * sticky call-to-action and the bottom tab bar.
+ *
+ * Mobile first. Below 900px the app fills the viewport edge to edge; at or
+ * above 900px it is presented in the prototype's device frame with the demo
+ * switcher above it, which is how the design was reviewed.
+ */
+
+/* ── outer page ─────────────────────────────────────────────────────────── */
+/* On a phone the app owns the viewport: the document itself never scrolls, so
+   the header, the call-to-action and the tab bar stay put while only the body
+   scrolls. `dvh` keeps that true while mobile browser chrome slides away. */
+.page {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.screenHost {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ── the app screen ─────────────────────────────────────────────────────── */
+.screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--color-text);
+  background: var(--color-bg);
+  padding-top: var(--safe-top);
+}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+.header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 48px;
+  padding: 6px var(--screen-gutter) var(--space-5);
+  padding-left: calc(var(--screen-gutter) + var(--safe-left));
+  padding-right: calc(var(--screen-gutter) + var(--safe-right));
+}
+
+.backButton {
+  width: 44px;
+  height: 44px;
+  margin-left: -10px;
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: background var(--transition-fast);
+}
+
+.backButton:hover {
+  background: var(--color-tint);
+}
+
+.headerText {
+  flex: 1;
+  min-width: 0;
+}
+
+.headerKicker {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.headerTitle {
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.4px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.headerAction {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  border-radius: var(--radius-lg);
+  color: var(--color-accent);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
+}
+
+.headerAction:hover {
+  background: var(--color-tint);
+}
+
+/* ── scrolling body ─────────────────────────────────────────────────────── */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--screen-gap);
+  padding: 0 var(--screen-gutter) var(--space-8);
+  padding-left: calc(var(--screen-gutter) + var(--safe-left));
+  padding-right: calc(var(--screen-gutter) + var(--safe-right));
+}
+
+/* Screens that centre their content (sign in, sent). */
+.bodyCentered {
+  justify-content: center;
+}
+
+/* When no CTA bar or tab bar follows, keep clear of the home indicator. */
+.bodyLoose {
+  padding-bottom: calc(var(--space-10) + var(--safe-bottom));
+}
+
+/* ── sticky call to action ──────────────────────────────────────────────── */
+.ctaBar {
+  flex: none;
+  padding: 10px var(--screen-gutter) 26px;
+  padding-bottom: calc(26px + var(--safe-bottom));
+  padding-left: calc(var(--screen-gutter) + var(--safe-left));
+  padding-right: calc(var(--screen-gutter) + var(--safe-right));
+  background: var(--color-bg);
+  box-shadow: var(--shadow-bar);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* When tabs follow the CTA there is no home indicator to clear. */
+.ctaBarAboveTabs {
+  padding-bottom: 12px;
+}
+
+.ctaNote {
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+.ctaRow {
+  display: flex;
+  gap: var(--space-5);
+}
+
+.ctaRow > :last-child {
+  flex: 1;
+}
+
+/* ── bottom tab bar ─────────────────────────────────────────────────────── */
+.tabBar {
+  flex: none;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 8px 6px 28px;
+  padding-bottom: calc(28px + var(--safe-bottom));
+  background: var(--color-bg);
+  box-shadow: var(--shadow-bar);
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 52px;
+  min-height: var(--tap-min);
+  padding: 0 2px;
+  font-size: 10px;
+  text-align: center;
+  color: var(--color-text-subtle);
+  background: transparent;
+}
+
+.tabActive {
+  color: var(--color-accent);
+}
+
+.tabLabel {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The raised "new distribution" action in the middle of the manager tabs. */
+.tabAction {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 26px;
+  box-shadow: var(--ring-primary), var(--glow-primary);
+  color: var(--color-accent);
+  flex-shrink: 0;
+  background: var(--color-bg);
+}
+
+.tabAction:hover {
+  background: var(--color-tint);
+}
+
+/* ── large-screen presentation ──────────────────────────────────────────── */
+.demoBar {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .page {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 18px;
+    padding: 28px 20px 60px;
+    background: var(--color-canvas);
+  }
+
+  .demoBar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    background: var(--color-card);
+    box-shadow: var(--ring);
+    flex: none;
+  }
+
+  .screenHost {
+    flex: none;
+    width: var(--app-max-width);
+    height: min(var(--app-max-height), calc(100dvh - 150px));
+    border-radius: 44px;
+    box-shadow: 0 0 0 1px var(--color-border), 0 30px 60px rgba(16, 42, 67, 0.13);
+  }
+
+  .footerHint {
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+    line-height: 1.6;
+    max-width: 560px;
+    text-align: center;
+  }
+}
+
+.footerHint {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .footerHint {
+    display: block;
+  }
+}
+
+/* ── demo bar internals ─────────────────────────────────────────────────── */
+.demoGroupLabel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.demoOptions {
+  display: flex;
+  gap: 6px;
+}
+
+.demoOption {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  box-shadow: var(--ring);
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.demoOption:hover {
+  background: var(--color-tint);
+}
+
+.demoOptionActive {
+  box-shadow: var(--ring-primary);
+  color: var(--color-accent);
+}
+
+.demoDivider {
+  width: 1px;
+  height: 22px;
+  background: var(--color-border);
+}
+
+.demoHint {
+  color: var(--color-text-subtle);
+  font-size: 11.5px;
+  line-height: 1.45;
+  max-width: 250px;
+}

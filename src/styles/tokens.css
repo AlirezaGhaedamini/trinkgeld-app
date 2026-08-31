@@ -1,0 +1,127 @@
+/*
+ * TipCrew design tokens.
+ *
+ * Every value here was read off the original `TipCrew Prototype.html`, which is
+ * the visual source of truth for the product. Change a colour or a radius here
+ * and it changes everywhere — do not hard-code hex values in components.
+ */
+
+:root {
+  /* ---- surfaces ------------------------------------------------------- */
+  --color-canvas: #e8f1f2; /* page behind the phone / large-screen backdrop */
+  --color-bg: #ffffff; /* the app screen itself */
+  --color-card: #ffffff; /* cards sit on the screen, separated by a hairline */
+  --color-tint: #e4f6f5; /* teal wash: hover, selected, soft badges */
+  --color-hero: #b9e9e7; /* mint hero block (last shift / tips this week) */
+  --color-hero-ring: rgba(35, 138, 104, 0.28);
+  --color-scrim: rgba(16, 42, 67, 0.34); /* modal backdrop */
+
+  /* ---- brand & accents ------------------------------------------------ */
+  --color-primary: #58c9c5; /* primary action fill */
+  --color-primary-hover: #45b8b4;
+  --color-primary-ink: #102a43; /* text on primary fill */
+  --color-accent: #0e7c86; /* deep teal: links, active tab, emphasis */
+  --color-warning: #ffc83d; /* attention ring, pending state, gold */
+  --color-money: #238a68; /* large money figures */
+  --color-money-row: #1c7c5c; /* money in dense rows */
+
+  /* ---- text ----------------------------------------------------------- */
+  --color-text: #102a43;
+  --color-text-strong: #102a43;
+  --color-text-secondary: #274963;
+  --color-text-muted: #486581;
+  --color-text-subtle: #5a7590;
+  --color-text-faint: #9fb3c8;
+
+  /* ---- lines ---------------------------------------------------------- */
+  --color-border: #dde5ec;
+  --color-border-faint: #edf2f5;
+  --color-divider: rgba(16, 42, 67, 0.08);
+  --color-divider-soft: rgba(16, 42, 67, 0.05);
+
+  /* ---- areas (kitchen / bar / …) — used for bands, dots and icons ----- */
+  --color-area-service: #58c9c5;
+  --color-area-bar: #63c27d;
+  --color-area-kitchen: #ffc83d;
+  --color-area-runner: #102a43;
+  --color-area-host: #9fb3c8;
+  --color-area-management: #dde5ec;
+
+  /* ---- type ----------------------------------------------------------- */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 17px;
+  --text-2xl: 20px;
+  --text-3xl: 22px;
+  --text-4xl: 26px;
+  --text-display-sm: 32px;
+  --text-display: 34px;
+  --text-display-lg: 40px;
+  --text-display-xl: 46px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ---- space ---------------------------------------------------------- */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-9: 20px;
+  --space-10: 24px;
+  --space-12: 32px;
+
+  /* the horizontal gutter of every screen */
+  --screen-gutter: 20px;
+  --screen-gap: 14px;
+
+  /* ---- radii ---------------------------------------------------------- */
+  --radius-xs: 3px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-pill: 999px;
+
+  /* ---- elevation ------------------------------------------------------
+   * The prototype draws card edges with a 1px spread shadow rather than a
+   * border, so padding maths stay clean. Keep that convention.            */
+  --ring: 0 0 0 1px var(--color-border);
+  --ring-faint: 0 0 0 1px var(--color-border-faint);
+  --ring-primary: 0 0 0 1px var(--color-primary);
+  --ring-warning: 0 0 0 1px var(--color-warning);
+  --shadow-sheet: 0 0 0 1px #9fb3c8, 0 -16px 40px rgba(16, 42, 67, 0.12);
+  --shadow-toast: 0 0 0 1px var(--color-warning), 0 10px 30px rgba(16, 42, 67, 0.1);
+  --shadow-bar: 0 -0.5px 0 rgba(16, 42, 67, 0.1);
+  --shadow-row: 0 0.5px 0 rgba(16, 42, 67, 0.08);
+  --glow-primary: 0 0 22px rgba(88, 201, 197, 0.08);
+
+  /* ---- touch targets --------------------------------------------------
+   * 44px is the platform minimum; the prototype's primary control is 52px. */
+  --tap-min: 44px;
+  --control-h: 52px;
+  --row-h: 56px;
+
+  /* ---- device safe areas (iOS notch / home indicator via Capacitor) ---- */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* ---- app frame ------------------------------------------------------ */
+  --app-max-width: 402px;
+  --app-max-height: 874px;
+
+  --transition-fast: 120ms ease;
+}

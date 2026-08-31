@@ -1,0 +1,127 @@
+/*
+ * Phosphor icon classes — subset.
+ *
+ * Only the glyphs TipCrew actually uses are declared here (46 icons in two
+ * weights) instead of the full ~9,000-rule stylesheet. When you add an icon to
+ * src/components/ui/Icon.tsx, add its rule here too; the codepoints come from
+ * the Phosphor `regular`/`fill` webfont CSS.
+ */
+
+.ph,
+.ph-fill {
+  speak: never;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  letter-spacing: 0;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.ph {
+  font-family: 'Phosphor' !important;
+}
+
+.ph-fill {
+  font-family: 'Phosphor-Fill' !important;
+}
+
+/* --- regular weight --- */
+.ph-anchor:before {  content: "\e514"; }
+.ph-arrow-counter-clockwise:before {  content: "\e038"; }
+.ph-arrow-left:before {  content: "\e058"; }
+.ph-backspace:before {  content: "\e0ae"; }
+.ph-bank:before {  content: "\e0b4"; }
+.ph-briefcase:before {  content: "\e0ee"; }
+.ph-calendar-blank:before {  content: "\e10a"; }
+.ph-caret-right:before {  content: "\e13a"; }
+.ph-check:before {  content: "\e182"; }
+.ph-check-circle:before {  content: "\e184"; }
+.ph-clipboard-text:before {  content: "\e198"; }
+.ph-clock:before {  content: "\e19a"; }
+.ph-cooking-pot:before {  content: "\e764"; }
+.ph-copy:before {  content: "\e1ca"; }
+.ph-credit-card:before {  content: "\e1d2"; }
+.ph-door-open:before {  content: "\e7e6"; }
+.ph-eye:before {  content: "\e220"; }
+.ph-file-arrow-down:before {  content: "\e232"; }
+.ph-gear:before {  content: "\e270"; }
+.ph-hand-heart:before {  content: "\e810"; }
+.ph-hourglass-medium:before {  content: "\e2b8"; }
+.ph-house:before {  content: "\e2c2"; }
+.ph-info:before {  content: "\e2ce"; }
+.ph-list-dashes:before {  content: "\e2f4"; }
+.ph-lock-simple:before {  content: "\e308"; }
+.ph-lock-simple-open:before {  content: "\e30a"; }
+.ph-magnifying-glass:before {  content: "\e30c"; }
+.ph-martini:before {  content: "\e31c"; }
+.ph-money:before {  content: "\e588"; }
+.ph-notebook:before {  content: "\e34e"; }
+.ph-paper-plane-tilt:before {  content: "\e398"; }
+.ph-pause:before {  content: "\e39e"; }
+.ph-play:before {  content: "\e3d0"; }
+.ph-plus:before {  content: "\e3d4"; }
+.ph-plus-circle:before {  content: "\e3d6"; }
+.ph-shield-check:before {  content: "\e40c"; }
+.ph-sneaker-move:before {  content: "\ed60"; }
+.ph-squares-four:before {  content: "\e464"; }
+.ph-translate:before {  content: "\e4a2"; }
+.ph-user:before {  content: "\e4c2"; }
+.ph-user-focus:before {  content: "\e6fc"; }
+.ph-user-plus:before {  content: "\e4d0"; }
+.ph-users-four:before {  content: "\e68c"; }
+.ph-users-three:before {  content: "\e68e"; }
+.ph-warning-circle:before {  content: "\e4e2"; }
+.ph-x:before {  content: "\e4f6"; }
+/* --- fill weight (same class names, scoped by .ph-fill on the element) --- */
+.ph-fill.ph-anchor:before {  content: "\e514"; }
+.ph-fill.ph-arrow-counter-clockwise:before {  content: "\e038"; }
+.ph-fill.ph-arrow-left:before {  content: "\e058"; }
+.ph-fill.ph-backspace:before {  content: "\e0ae"; }
+.ph-fill.ph-bank:before {  content: "\e0b4"; }
+.ph-fill.ph-briefcase:before {  content: "\e0ee"; }
+.ph-fill.ph-calendar-blank:before {  content: "\e10a"; }
+.ph-fill.ph-caret-right:before {  content: "\e13a"; }
+.ph-fill.ph-check:before {  content: "\e182"; }
+.ph-fill.ph-check-circle:before {  content: "\e184"; }
+.ph-fill.ph-clipboard-text:before {  content: "\e198"; }
+.ph-fill.ph-clock:before {  content: "\e19a"; }
+.ph-fill.ph-cooking-pot:before {  content: "\e764"; }
+.ph-fill.ph-copy:before {  content: "\e1ca"; }
+.ph-fill.ph-credit-card:before {  content: "\e1d2"; }
+.ph-fill.ph-door-open:before {  content: "\e7e6"; }
+.ph-fill.ph-eye:before {  content: "\e220"; }
+.ph-fill.ph-file-arrow-down:before {  content: "\e232"; }
+.ph-fill.ph-gear:before {  content: "\e270"; }
+.ph-fill.ph-hand-heart:before {  content: "\e810"; }
+.ph-fill.ph-hourglass-medium:before {  content: "\e2b8"; }
+.ph-fill.ph-house:before {  content: "\e2c2"; }
+.ph-fill.ph-info:before {  content: "\e2ce"; }
+.ph-fill.ph-list-dashes:before {  content: "\e2f4"; }
+.ph-fill.ph-lock-simple:before {  content: "\e308"; }
+.ph-fill.ph-lock-simple-open:before {  content: "\e30a"; }
+.ph-fill.ph-magnifying-glass:before {  content: "\e30c"; }
+.ph-fill.ph-martini:before {  content: "\e31c"; }
+.ph-fill.ph-money:before {  content: "\e588"; }
+.ph-fill.ph-notebook:before {  content: "\e34e"; }
+.ph-fill.ph-paper-plane-tilt:before {  content: "\e398"; }
+.ph-fill.ph-pause:before {  content: "\e39e"; }
+.ph-fill.ph-play:before {  content: "\e3d0"; }
+.ph-fill.ph-plus:before {  content: "\e3d4"; }
+.ph-fill.ph-plus-circle:before {  content: "\e3d6"; }
+.ph-fill.ph-shield-check:before {  content: "\e40c"; }
+.ph-fill.ph-sneaker-move:before {  content: "\ed60"; }
+.ph-fill.ph-squares-four:before {  content: "\e464"; }
+.ph-fill.ph-translate:before {  content: "\e4a2"; }
+.ph-fill.ph-user:before {  content: "\e4c2"; }
+.ph-fill.ph-user-focus:before {  content: "\e6fc"; }
+.ph-fill.ph-user-plus:before {  content: "\e4d0"; }
+.ph-fill.ph-users-four:before {  content: "\e68c"; }
+.ph-fill.ph-users-three:before {  content: "\e68e"; }
+.ph-fill.ph-warning-circle:before {  content: "\e4e2"; }
+.ph-fill.ph-x:before {  content: "\e4f6"; }

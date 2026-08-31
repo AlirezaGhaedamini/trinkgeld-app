@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1000" viewBox="0 0 1400 1000">
+  <rect width="1400" height="1000" fill="#FFFFFF"/>
+
+  <!-- Tip Jar -->
+  <g transform="translate(440 70)">
+    <!-- Jar body -->
+    <path d="M130 115
+             C95 145 72 190 72 250
+             L92 530
+             C96 585 128 615 185 620
+             L425 620
+             C482 615 514 585 518 530
+             L538 250
+             C538 190 515 145 480 115
+             Z"
+          fill="#B9E9E7" stroke="#102A43" stroke-width="18" stroke-linejoin="round"/>
+
+    <!-- Inner aqua tint -->
+    <path d="M120 150 C105 190 102 235 104 285 L120 500 C124 550 145 575 190 580 L420 580 C465 575 486 550 490 500 L506 285 C508 235 505 190 490 150 Z"
+          fill="#58C9C5" opacity="0.25"/>
+
+    <!-- Jar rim -->
+    <path d="M115 85
+             C115 50 150 35 195 35
+             L415 35
+             C460 35 495 50 495 85
+             L495 120
+             C495 145 462 160 415 160
+             L195 160
+             C148 160 115 145 115 120
+             Z"
+          fill="#58C9C5" stroke="#102A43" stroke-width="18" stroke-linejoin="round"/>
+    <ellipse cx="305" cy="86" rx="173" ry="33" fill="#D9F6F4" stroke="#102A43" stroke-width="14"/>
+    <ellipse cx="305" cy="88" rx="120" ry="15" fill="#102A43"/>
+
+    <!-- Top coin -->
+    <g transform="translate(330 -8) rotate(10)">
+      <ellipse cx="58" cy="60" rx="50" ry="66" fill="#FFC83D" stroke="#102A43" stroke-width="14"/>
+      <ellipse cx="58" cy="60" rx="33" ry="46" fill="#FFD964" stroke="#E4A81F" stroke-width="7"/>
+    </g>
+
+    <!-- Bills -->
+    <g>
+      <path d="M130 275 L380 215 L430 420 L180 480 Z" fill="#63C27D" stroke="#238A68" stroke-width="12" stroke-linejoin="round"/>
+      <circle cx="280" cy="347" r="58" fill="#238A68" opacity="0.18"/>
+      <path d="M155 325 L445 275 L470 480 L180 530 Z" fill="#63C27D" stroke="#238A68" stroke-width="12" stroke-linejoin="round"/>
+      <circle cx="320" cy="400" r="62" fill="#238A68" opacity="0.18"/>
+      <path d="M125 400 L430 345 L468 540 L165 590 Z" fill="#63C27D" stroke="#238A68" stroke-width="12" stroke-linejoin="round"/>
+      <circle cx="300" cy="470" r="60" fill="#238A68" opacity="0.18"/>
+    </g>
+
+    <!-- Highlight -->
+    <path d="M105 220 C92 280 98 338 103 380" fill="none" stroke="#FFFFFF" stroke-width="17" stroke-linecap="round" opacity="0.75"/>
+    <circle cx="98" cy="404" r="11" fill="#FFFFFF" opacity="0.85"/>
+
+    <!-- Front label -->
+    <path d="M175 315
+             Q170 300 190 295
+             L415 315
+             Q440 317 445 340
+             L430 515
+             Q428 540 404 545
+             L188 528
+             Q165 525 163 500
+             Z"
+          fill="#FFF1C7" stroke="#102A43" stroke-width="16" stroke-linejoin="round"/>
+
+    <!-- TC -->
+    <text x="235" y="445" font-family="Arial Rounded MT Bold, Arial, sans-serif"
+          font-size="120" font-weight="700" fill="#102A43">TC</text>
+    <path d="M245 490 Q300 535 355 493" fill="none" stroke="#102A43" stroke-width="12" stroke-linecap="round"/>
+
+    <!-- Bottom coins -->
+    <g transform="translate(108 565)">
+      <ellipse cx="62" cy="42" rx="62" ry="24" fill="#FFC83D" stroke="#102A43" stroke-width="10"/>
+      <path d="M0 42 L0 63 C0 79 27 92 62 92 C97 92 124 79 124 63 L124 42"
+            fill="#FFC83D" stroke="#102A43" stroke-width="10"/>
+      <ellipse cx="62" cy="42" rx="62" ry="24" fill="#FFD964" stroke="#102A43" stroke-width="10"/>
+      <ellipse cx="145" cy="72" rx="48" ry="19" fill="#FFC83D" stroke="#102A43" stroke-width="9"/>
+      <path d="M97 72 L97 88 C97 101 118 111 145 111 C172 111 193 101 193 88 L193 72"
+            fill="#FFC83D" stroke="#102A43" stroke-width="9"/>
+      <ellipse cx="145" cy="72" rx="48" ry="19" fill="#FFD964" stroke="#102A43" stroke-width="9"/>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(160 775)">
+    <text x="0" y="120" font-family="Arial Rounded MT Bold, Arial, sans-serif"
+          font-size="170" font-weight="700" fill="#102A43">Tip</text>
+    <text x="330" y="120" font-family="Arial Rounded MT Bold, Arial, sans-serif"
+          font-size="170" font-weight="700" fill="#58C9C5">Crew</text>
+  </g>
+</svg>
