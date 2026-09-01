@@ -33,6 +33,8 @@ import { InvitePage } from '@/pages/manager/InvitePage';
 import { DistributionsPage } from '@/pages/manager/DistributionsPage';
 import { DistributionDetailPage } from '@/pages/manager/DistributionDetailPage';
 import { RulesPage } from '@/pages/manager/RulesPage';
+import { RolePointsPage } from '@/pages/manager/RolePointsPage';
+import { WorkplaceSettingsPage } from '@/pages/manager/WorkplaceSettingsPage';
 import { StaffReportsPage } from '@/pages/manager/StaffReportsPage';
 import { OverlapPage } from '@/pages/manager/OverlapPage';
 
@@ -112,6 +114,8 @@ export function AppRoutes() {
               <Route path="/manager/sent" element={<SentPage />} />
               <Route path="/manager/hours" element={<HoursReviewPage mode="review" />} />
               <Route path="/manager/overlap" element={<OverlapPage />} />
+              <Route path="/manager/rules/roles" element={<RolePointsPage />} />
+              <Route path="/manager/rules/workplace" element={<WorkplaceSettingsPage />} />
               <Route path="/manager/reports" element={<StaffReportsPage />} />
               <Route path="/manager/invite" element={<InvitePage />} />
               <Route path="/manager/team/:employeeId" element={<MemberPage />} />

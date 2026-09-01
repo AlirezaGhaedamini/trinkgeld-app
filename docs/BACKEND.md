@@ -54,6 +54,7 @@ each one is independently reviewable.
 | `…001500_distribution_integrity.sql` | three defects found auditing the money path — see below |
 | `…001600_pairwise_overlap.sql` | the pairwise model, and no silent redistribution |
 | `…001700_calc_no_unqualified_update.sql` | removes the one write with no WHERE clause — see below |
+| `…001800_rule_tenancy_guard.sql` | a rule's areas, roles and rounding area must belong to its own workplace — see below |
 
 ---
 
@@ -355,6 +356,44 @@ Two things follow for anything added later:
 `supabase/tests/07_no_unqualified_writes.sql` lints every `plpgsql` and `sql`
 function in `public` and `app` for this shape, so the class of bug cannot come
 back unnoticed on a cluster that has no `pg_safeupdate` to catch it.
+
+---
+
+## 4b. Rule tenancy (migration 18)
+
+The policies on `distribution_rule_areas` and `distribution_rule_roles` authorise
+on the row's **own** `workplace_id` column:
+
+```sql
+using (app.is_manager(workplace_id)) with check (app.is_manager(workplace_id))
+```
+
+That column comes from the client. Until migration 18 nothing compared it with
+the parent rule, and nothing checked that `area_id` / `workplace_role_id`
+belonged to that workplace. Two real consequences:
+
+* A manager of workplace A could insert a share row carrying `workplace_id = A`
+  and `rule_id = <a draft of workplace B>`. WITH CHECK passes, the immutability
+  trigger passes, and a stranger's draft gains a row. Reaching it needs B's rule
+  id, which RLS does not hand out — but authorisation must not rest on an id
+  being hard to guess.
+* A manager could point their own rule's `area_id` at another workplace's area.
+  Since migration 16 refuses a distribution when an area with a share has no
+  eligible staff, that workplace could permanently block its own distributions —
+  and the refusal names the area, built inside a `security definer` function, so
+  the message would read back a foreign workplace's area name.
+
+`rounding_area_id` on `distribution_rules` had the same gap.
+
+Three guards close it: `app.guard_rule_area_tenancy()`,
+`app.guard_rule_role_tenancy()` and `app.guard_rule_rounding_area()`. They
+compare ids and nothing else. They are `security definer` because they must read
+the parent rule and the target area or role whether or not the caller can see
+them — an invoker guard would report "not found" for a row that exists. They
+make no decision from `current_user`, so unlike `app.guard_rule_immutable()`
+(which asks `app.is_trusted_context()` and must stay invoker) definer rights
+cannot weaken them, and they are not skipped for a trusted context: tenancy is
+an invariant, not a permission.
 
 ---
 
