@@ -55,6 +55,7 @@ each one is independently reviewable.
 | `…001600_pairwise_overlap.sql` | the pairwise model, and no silent redistribution |
 | `…001700_calc_no_unqualified_update.sql` | removes the one write with no WHERE clause — see below |
 | `…001800_rule_tenancy_guard.sql` | a rule's areas, roles and rounding area must belong to its own workplace — see below |
+| `…001900_area_role_management.sql` | creating, renaming, reordering, archiving and restoring areas and roles — see below |
 
 ---
 
@@ -394,6 +395,54 @@ make no decision from `current_user`, so unlike `app.guard_rule_immutable()`
 (which asks `app.is_trusted_context()` and must stay invoker) definer rights
 cannot weaken them, and they are not skipped for a trusted context: tenancy is
 an invariant, not a permission.
+
+---
+
+## 4c. Areas and roles (migration 19)
+
+The tables were built for editing from the start — `sort_order`, `archived_at`, a
+per-workplace unique `key`, and `on delete restrict` on every reference — but
+nothing enforced the rules that make editing safe. Migration 19 adds them.
+
+**Delete is already safe.** Every foreign key into `workplace_areas` and
+`workplace_roles` restricts (`invitations.proposed_area_id` and
+`distribution_rules.rounding_area_id` are `set null`), so a referenced row cannot
+be deleted whatever the client asks. `area_usage()` / `role_usage()` report a
+`references` count across exactly those restricting keys: zero is the only state
+in which the delete will go through, and it is the only state in which the app
+offers it.
+
+**Rename is always safe.** `tip_distribution_areas` and
+`tip_distribution_entries` store `area_key`, `area_name`, `role_key`, `role_name`
+and `points` as snapshots taken at calculation time, so a payslip keeps the words
+it was issued with. The `key` never moves with a rename.
+
+**Archive is the operation that needs a policy.** It is refused while the thing
+is part of live operations:
+
+| | refused while |
+| --- | --- |
+| an area | an active member has it as their default · an unfinished shift (draft, submitted, or approved-but-not-locked) references it · the active rule or the open draft gives it a share above 0 · a non-archived role still belongs to it |
+| a role | an active member has it as their default · an unfinished shift references it |
+
+Locked shifts, superseded rule versions and anything inside a distribution do
+**not** block: they are history, they carry their own snapshot, and blocking on
+them would make archiving impossible after the first month. Roles under an
+archived area are neither archived automatically nor reassigned — the manager
+archives them first, explicitly. A silent cascade over something carrying a pay
+weight is what this product exists to avoid.
+
+**Archived means "not offered again", enforced where the reference is written:**
+triggers refuse a new or changed `area_id` / `workplace_role_id` on
+`workplace_members` and `shifts`, a `distribution_rule_areas` share above 0, and
+a `rounding_area_id`. Rows that already point at something since archived keep
+working and keep rendering. A rule share of exactly 0 is allowed for an archived
+area — that is what lets `create_rule_draft()` copy the active rule forward, and
+an area can only reach `archived` while its share is already zero.
+
+Names are unique among *live* rows only, so an archived "Bar" and a new "Bar" can
+coexist; the new one takes the key `bar_2`, because archived rows keep theirs.
+`app.slugify()` derives the key from the name (`Späti Küche` → `spaeti_kueche`).
 
 ---
 

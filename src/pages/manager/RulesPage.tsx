@@ -451,6 +451,15 @@ function RealRules() {
         <button
           type="button"
           className={`${ui.insetRow} ${ui.insetRowInteractive}`}
+          onClick={() => navigate('/manager/rules/areas')}
+        >
+          <span className={`${ui.rowMain} ${ui.rowTitle}`}>{t('cfgAreasTitle')}</span>
+          <span className={ui.rowValue}>{poolAreas.length}</span>
+          <Icon name="caret-right" size={13} className={ui.chevron} />
+        </button>
+        <button
+          type="button"
+          className={`${ui.insetRow} ${ui.insetRowInteractive}`}
           onClick={() => navigate('/manager/rules/roles')}
         >
           <span className={`${ui.rowMain} ${ui.rowTitle}`}>{t('rolePointsTitle')}</span>

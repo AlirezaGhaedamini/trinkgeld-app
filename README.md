@@ -322,6 +322,7 @@ node scripts/workplace-check.mjs   # Phase 3B: membership, invitations, promotio
 node scripts/shifts-check.mjs      # Phase 3C: shifts, review columns, tip reports
 node scripts/distribution-check.mjs # Phase 3D: pools, calculation, finalisation, history
 node scripts/rules-check.mjs       # Phase 3E: rule versions, workplace settings, tenancy
+node scripts/areas-roles-check.mjs # Phase 3F: area and role management, archive policy
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test

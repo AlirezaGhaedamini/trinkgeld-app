@@ -1460,6 +1460,9 @@ export type Database = {
         }
         Returns: string
       }
+      archive_workplace_area: { Args: { p_area_id: string }; Returns: Json }
+      archive_workplace_role: { Args: { p_role_id: string }; Returns: Json }
+      area_usage: { Args: { p_area_id: string }; Returns: Json }
       calculate_distribution: { Args: { p_pool_id: string }; Returns: string }
       cancel_distribution: {
         Args: { p_distribution_id: string; p_reason: string }
@@ -1500,7 +1503,41 @@ export type Database = {
         }
         Returns: string
       }
+      create_workplace_area: {
+        Args: {
+          p_name: string
+          p_pool_eligible?: boolean
+          p_workplace_id: string
+        }
+        Returns: string
+      }
+      create_workplace_role: {
+        Args: {
+          p_area_id: string
+          p_name: string
+          p_points?: number
+          p_workplace_id: string
+        }
+        Returns: string
+      }
+      reorder_workplace_areas: {
+        Args: { p_ids: string[]; p_workplace_id: string }
+        Returns: undefined
+      }
+      reorder_workplace_roles: {
+        Args: { p_area_id: string; p_ids: string[] }
+        Returns: undefined
+      }
       request_join: { Args: { p_join_code: string }; Returns: string }
+      restore_workplace_area: {
+        Args: { p_area_id: string }
+        Returns: undefined
+      }
+      restore_workplace_role: {
+        Args: { p_role_id: string }
+        Returns: undefined
+      }
+      role_usage: { Args: { p_role_id: string }; Returns: Json }
       send_distribution: {
         Args: { p_distribution_id: string }
         Returns: undefined
