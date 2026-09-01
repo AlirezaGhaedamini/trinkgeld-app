@@ -3,11 +3,13 @@ import { Screen } from '@/components/layout/Screen';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icon';
+import { Note } from '@/components/ui/Note';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { distributionById, latestDistribution, shareOf } from '@/state/selectors';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
+import { ACK_VIEW, ackViewFor, acknowledgedAtFor } from '@/distribution/ack';
 import { useMyShare } from '@/distribution/useDistribution';
 import ui from '@/components/ui/ui.module.css';
 import styles from '@/pages/pages.module.css';
@@ -55,14 +57,29 @@ export function PayoutPage() {
     }
 
     const visible = mine.entries.filter((e) => e.distributionId === realDistribution.id);
-    const own = visible.find((e) => e.isOwn !== false) ?? visible[0] ?? null;
+    // Every entry that is actually theirs. Somebody who worked Service and then
+    // Bar has two, and both are answered by one action.
+    const ownEntries = visible.filter((e) => e.isOwn !== false);
+    const own = ownEntries[0] ?? null;
     const areaRow = (mine.areas[realDistribution.id] ?? []).find(
       (a) => a.areaId === own?.areaId,
     );
-    const totalCents = visible
-      .filter((e) => e.isOwn !== false)
-      .reduce((sum, e) => sum + e.amountCents, 0);
-    const needsAck = own !== null && own.ackStatus === 'pending' && realDistribution.status !== 'cancelled';
+    const totalCents = ownEntries.reduce((sum, e) => sum + e.amountCents, 0);
+
+    // The requirement is the one frozen into this distribution, not today's
+    // rule — an old payout keeps asking, or not asking, exactly what it did.
+    const ackView = ackViewFor(ownEntries, realDistribution.acknowledgementRequired);
+    const presentation = ACK_VIEW[ackView];
+    const canAnswer = presentation.showCta && realDistribution.status !== 'cancelled';
+    const answeredAt = acknowledgedAtFor(ownEntries);
+    const answer = (next: 'acknowledged' | 'queried') =>
+      mine.acknowledge(realDistribution.id, next).then((r) => {
+        if (!r.ok) {
+          show(t(DISTRIBUTION_FAILURE_KEY[r.failure ?? 'unknown']));
+          return false;
+        }
+        return true;
+      });
 
     const steps: Array<{
       step: string; label: string; value: string; math: string; dot: string; glow: string;
@@ -114,15 +131,12 @@ export function PayoutPage() {
         title={t('yourShare')}
         kicker={day(new Date(`${realDistribution.periodStart}T12:00:00`))}
         cta={
-          needsAck
+          canAnswer
             ? {
                 label: t('looksRight'),
                 onClick: () => {
-                  void mine.acknowledge(own.id, 'acknowledged').then((r) => {
-                    if (!r.ok) {
-                      show(t(DISTRIBUTION_FAILURE_KEY[r.failure ?? 'unknown']));
-                      return;
-                    }
+                  void answer('acknowledged').then((ok) => {
+                    if (!ok) return;
                     show(t('ackToast'));
                     navigate(-1);
                   });
@@ -130,8 +144,8 @@ export function PayoutPage() {
                 secondary: {
                   label: t('query'),
                   onClick: () => {
-                    void mine.acknowledge(own.id, 'queried').then((r) => {
-                      show(r.ok ? t('queryToast') : t(DISTRIBUTION_FAILURE_KEY[r.failure ?? 'unknown']));
+                    void answer('queried').then((ok) => {
+                      if (ok) show(t('queryToast'));
                     });
                   },
                 },
@@ -193,10 +207,29 @@ export function PayoutPage() {
           </Card>
         ) : null}
 
-        <p className={ui.inline} style={{ fontSize: 13, color: 'var(--color-text-subtle)' }}>
-          <Icon name="shield-check" size={17} color="var(--color-accent)" />
-          {needsAck ? t('awaitingMgr') : t('confirmedByMgr')}
-        </p>
+        {/* What the confirmation is, and is not. Three states, never an enum. */}
+        <div className={ui.stackTight}>
+          <p className={ui.inline} style={{ fontSize: 13, color: 'var(--color-text-subtle)' }}>
+            <Icon
+              name={ackView === 'queried' ? 'hourglass-medium' : 'shield-check'}
+              size={17}
+              color={
+                presentation.tone === 'subtle' ? 'var(--color-text-subtle)' : 'var(--color-accent)'
+              }
+            />
+            {t(presentation.label)}
+            {answeredAt && ackView === 'acknowledged'
+              ? ` · ${t('ackConfirmedOn').replace('{when}', day(new Date(answeredAt)))}`
+              : ''}
+          </p>
+          <Note>
+            {ackView === 'notRequired'
+              ? t('ackNotRequiredNote')
+              : ownEntries.length > 1 && canAnswer
+                ? t('ackBothAreas')
+                : t('ackRequiredNote')}
+          </Note>
+        </div>
       </Screen>
     );
   }

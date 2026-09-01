@@ -25,6 +25,7 @@
 
 import type { TipCrewClient } from '@/lib/supabase';
 import type { Membership } from '@/workplace/types';
+import type { AckStateRow } from '@/distribution/ack';
 import {
   toArea,
   toDistribution,
@@ -411,6 +412,9 @@ export async function fetchMyEntries(client: TipCrewClient): Promise<Distributio
     roundingAdjustmentCents: row.rounding_adjustment_cents ?? 0,
     shiftIds: [],
     ackStatus: (row.ack_status ?? 'pending') as DistributionEntry['ackStatus'],
+    acknowledgedAt: row.acknowledged_at,
+    queriedAt: row.queried_at,
+    queryNote: row.query_note,
     isOwn: row.is_own ?? undefined,
   }));
 }
@@ -432,6 +436,61 @@ export async function fetchVisibleAreas(
     .eq('distribution_id', distributionId);
   if (error) return [];
   return (data ?? []).map(toArea);
+}
+
+/**
+ * Confirms every entry the caller owns in one distribution.
+ *
+ * The browser sends a distribution id and never a member id — which entries
+ * that means is decided in the database from the signed-in user. A member who
+ * worked two areas therefore answers both in one statement, so the screen can
+ * never claim a confirmation that only half happened.
+ */
+export async function acknowledgeDistribution(
+  client: TipCrewClient,
+  distributionId: string,
+  status: 'acknowledged' | 'queried',
+  note?: string,
+): Promise<number> {
+  const { data, error } = await client.rpc('acknowledge_distribution', {
+    p_distribution_id: distributionId,
+    p_status: status,
+    ...(note ? { p_note: note } : {}),
+  });
+  if (error) throw error;
+  return typeof data === 'number' ? data : 0;
+}
+
+/** The manager's per-entry acknowledgement state. Snapshot names only. */
+export async function fetchAckState(
+  client: TipCrewClient,
+  distributionId: string,
+): Promise<AckStateRow[]> {
+  const { data, error } = await client.rpc('distribution_ack_state', {
+    p_distribution_id: distributionId,
+  });
+  if (error) throw error;
+  return (
+    (data ?? []) as unknown as Array<{
+      entry_id: string;
+      member_id: string;
+      member_name: string;
+      area_name: string;
+      ack_status: DistributionEntry['ackStatus'];
+      acknowledged_at: string | null;
+      queried_at: string | null;
+      can_acknowledge: boolean;
+    }>
+  ).map((r) => ({
+    entryId: r.entry_id,
+    memberId: r.member_id,
+    memberName: r.member_name,
+    areaName: r.area_name,
+    ackStatus: r.ack_status,
+    acknowledgedAt: r.acknowledged_at,
+    queriedAt: r.queried_at,
+    canAcknowledge: r.can_acknowledge,
+  }));
 }
 
 export async function acknowledgeEntry(

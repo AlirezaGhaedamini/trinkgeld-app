@@ -4,6 +4,7 @@ import { shareOf } from '@/state/selectors';
 import { useAppState } from '@/hooks/useAppState';
 import { useI18n } from '@/hooks/useI18n';
 import { useActiveRole } from '@/hooks/useWorkplace';
+import { ACK_VIEW, ackViewFor } from '@/distribution/ack';
 import { useDistributionHistory, useMyShare } from '@/distribution/useDistribution';
 
 /**
@@ -59,14 +60,18 @@ export function useDistributionRows(options: { chips?: boolean } = {}): HistoryR
       );
       const amountCents = own.reduce((sum, e) => sum + e.amountCents, 0);
       const minutes = own.reduce((sum, e) => sum + e.workedMinutes, 0);
-      const pending = own.some((e) => e.ackStatus === 'pending');
+      // Three states, not two: a distribution sent when confirmation was not
+      // required is not "waiting", and never was.
+      const view = ackViewFor(own, distribution.acknowledgementRequired);
+      const presentation = ACK_VIEW[view];
       return {
         id: distribution.id,
         date: day(new Date(`${distribution.periodStart}T12:00:00`)),
         meta: `${own[0]?.areaName ?? ''} · ${hours(minutes / 60)}`.replace(/^ · /, ''),
         amount: money(amountCents / 100),
-        status: pending ? t('needsOK') : t('acknowledged'),
-        statusColor: pending ? 'var(--color-accent)' : 'var(--color-text-subtle)',
+        status: t(presentation.label),
+        statusColor:
+          presentation.tone === 'subtle' ? 'var(--color-text-subtle)' : 'var(--color-accent)',
         chip: undefined,
         onOpen: () => navigate(`/payout/${distribution.id}`),
       };

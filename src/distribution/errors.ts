@@ -23,6 +23,10 @@ export type DistributionFailure =
   | 'noReports'
   | 'unsupportedBasis'
   | 'roundingError'
+  | 'ackNotSent'
+  | 'ackNotYours'
+  | 'ackSuspended'
+  | 'ackTakeBack'
   | 'network'
   | 'notConfigured'
   | 'unknown';
@@ -43,6 +47,10 @@ export const DISTRIBUTION_FAILURE_KEY: Record<DistributionFailure, StringKey> = 
   noReports: 'dErrNoReports',
   unsupportedBasis: 'dErrBasis',
   roundingError: 'dErrRounding',
+  ackNotSent: 'ackErrNotSent',
+  ackNotYours: 'ackErrNotYours',
+  ackSuspended: 'ackErrSuspended',
+  ackTakeBack: 'ackErrTakeBack',
   network: 'authNetwork',
   notConfigured: 'authNotConfigured',
   unknown: 'authUnknown',
@@ -82,6 +90,13 @@ export function classifyDistributionError(error: unknown): DistributionFailure {
   ) {
     return 'network';
   }
+
+  // Acknowledgement first: these all carry 42501, which the catch-all below
+  // would otherwise report as "you are not a manager".
+  if (message.includes('has not been sent yet')) return 'ackNotSent';
+  if (message.includes('access to this workplace is paused')) return 'ackSuspended';
+  if (message.includes('cannot be taken back')) return 'ackTakeBack';
+  if (message.includes('entry not found')) return 'ackNotYours';
 
   if (message.includes('recalculate before sending')) return 'stale';
   if (message.includes('only a draft can be sent')) return 'alreadySent';

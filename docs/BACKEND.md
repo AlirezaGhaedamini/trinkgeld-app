@@ -57,6 +57,7 @@ each one is independently reviewable.
 | `…001800_rule_tenancy_guard.sql` | a rule's areas, roles and rounding area must belong to its own workplace — see below |
 | `…001900_area_role_management.sql` | creating, renaming, reordering, archiving and restoring areas and roles — see below |
 | `…002000_member_tenancy_and_requests.sql` | a membership's area and role must be its own workplace's, and the role must belong to that area; the manager's join-request queue — see below |
+| `…002100_acknowledgement.sql` | the frozen requirement on the member's view, one action per distribution, and the two doors made to refuse the same things — see below |
 
 ---
 
@@ -493,6 +494,55 @@ non-manager rather than returning an empty set, because "there is nothing" and
 Nothing here creates a membership. `approve_join_request()` still hard-codes
 `'employee'`, and `accept_invitation()` still takes the role from the invitation
 row, so no value a joining person controls can produce a manager.
+
+---
+
+## 4e. Acknowledgement (migration 21)
+
+The enum, the columns and `acknowledge_entry()` were all in place from Phase 2.
+Migration 21 adds the four things the flow was missing.
+
+**The requirement, where the person it binds can read it.**
+`distribution_rules.acknowledgement_required` is frozen into
+`tip_distributions.rules_snapshot` at calculation time, and nothing member-facing
+exposed it. `member_distributions` now carries it as a column, read from the
+snapshot — so a distribution keeps the requirement it was sent with, and a later
+rule change does not reach back into it. The rest of `rules_snapshot`, which
+holds every area's percentage, stays where it was.
+
+**Two doors that refused different things.** The direct PostgREST path (policy
+`entries_update_own_ack`) tests `app.distribution_is_published()`;
+`acknowledge_entry()` is `SECURITY DEFINER` and therefore bypasses RLS, so it
+had no such test and was the one way to confirm a draft. Both now refuse it.
+
+**A moment that drifted.** Acknowledging twice moved `acknowledged_at` forward.
+It is now `coalesce(acknowledged_at, now())`: re-confirming is accepted and
+changes nothing.
+
+**One action for a person, not for a row.** `calculate_distribution()` groups by
+`member_id, area_id`, so somebody who worked two areas in one period holds two
+entries. `acknowledge_distribution(distribution, status, note)` answers every
+entry the caller owns in one statement, deciding which those are from
+`auth.uid()` — the browser sends a distribution id and never a member id.
+
+**And what the direct path could still do.** The existing column guard froze the
+money but not the answer, so a member could write `ack_status` back to `pending`
+after the manager had seen the tally, and could set `acknowledged_at` to any
+value. `app.guard_entry_columns()` is republished here refusing both. It is
+`SECURITY INVOKER`, so `app.is_trusted_context()` is true only inside the
+definer RPCs — which is exactly where the timestamps are meant to be set.
+Changing your mind between `acknowledged` and `queried` is still allowed;
+withdrawing into silence is not.
+
+### Who owes an answer
+
+`public.distribution_ack_state(distribution)` returns one row per entry for a
+manager — snapshot names only, no profile, no email — with `can_acknowledge`
+false for a roster placeholder that has no account. That is precisely the set
+the auto-confirm in both RPCs ignores, so the manager's tally and the engine's
+decision to close a distribution are derived from one definition rather than
+two. Counting entries instead of people would read "9 of 8 confirmed" the moment
+somebody worked two areas.
 
 ---
 

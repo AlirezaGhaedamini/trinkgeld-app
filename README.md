@@ -23,7 +23,7 @@ the percentages or the rules and the numbers update.
 lives in `supabase/migrations/` — 16 tables, 16 enums, 44 RLS policies, the
 distribution engine as PostgreSQL functions, and a member read layer that keeps
 employees out of manager-only tables. It has been applied and exercised against
-a real PostgreSQL 16 instance (`supabase/tests/rebuild.sh --test`, now 381
+a real PostgreSQL 16 instance (`supabase/tests/rebuild.sh --test`, now 426
 assertions across the phases below). See **[`docs/BACKEND.md`](docs/BACKEND.md)**.
 
 **Phase 3A — authentication. Complete.** Sign-in, registration, session
@@ -67,6 +67,13 @@ approval and invitations. A default area and role are written together so the
 pair is always coherent, the weighting is bounded by the database, removal is a
 standing rather than a deletion so the financial trail keeps pointing at
 somebody, and a workplace can never lose its last active manager.
+
+**Phase 3H — acknowledgement. Complete.** The employee confirms they have seen
+their share, and the manager sees who still owes an answer. One action answers
+every entry a person holds in a distribution, so somebody who worked two areas
+is never half-confirmed; the requirement is the one frozen into the distribution
+when it was sent; and a confirmation, once given, cannot be quietly withdrawn.
+It is a product-level confirmation of receipt, not a payment record.
 
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
@@ -343,6 +350,7 @@ node scripts/distribution-check.mjs # Phase 3D: pools, calculation, finalisation
 node scripts/rules-check.mjs       # Phase 3E: rule versions, workplace settings, tenancy
 node scripts/areas-roles-check.mjs # Phase 3F: area and role management, archive policy
 node scripts/members-check.mjs     # Phase 3G: roster, assignments, suspension, join requests
+node scripts/acknowledgement-check.mjs # Phase 3H: confirmation, multi-area entries, tallies
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test

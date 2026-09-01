@@ -14,7 +14,11 @@ import { useToast } from '@/hooks/useToast';
 import { distributionById, resultForDistribution } from '@/state/selectors';
 import { colorForAreaKey } from '@/data/areas';
 import { useDistributionHistory } from '@/distribution/useDistribution';
+import { ACK_VIEW, tally, type AckStateRow } from '@/distribution/ack';
 import type { DistributionDetail } from '@/distribution/types';
+import { Badge } from '@/components/ui/Badge';
+import { ListRow } from '@/components/ui/ListRow';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import ui from '@/components/ui/ui.module.css';
 import styles from '@/pages/pages.module.css';
 
@@ -29,6 +33,7 @@ export function DistributionDetailPage() {
   const history = useDistributionHistory();
   const real = history.enabled;
   const [detail, setDetail] = useState<DistributionDetail | null>(null);
+  const [ackRows, setAckRows] = useState<AckStateRow[]>([]);
 
   /**
    * Read back, never recomputed.
@@ -43,10 +48,13 @@ export function DistributionDetailPage() {
     void history.loadDetail(distributionId).then((loaded) => {
       if (!cancelled) setDetail(loaded);
     });
+    void history.loadAckState(distributionId).then((rows) => {
+      if (!cancelled) setAckRows(rows);
+    });
     return () => {
       cancelled = true;
     };
-  }, [real, distributionId, history.loadDetail]);
+  }, [real, distributionId, history.loadDetail, history.loadAckState]);
 
   if (real) {
     if (!detail) {
@@ -59,7 +67,15 @@ export function DistributionDetailPage() {
 
     const { distribution: dist, areas, entries } = detail;
     const isDraft = dist.status === 'draft';
-    const awaiting = entries.filter((e) => e.ackStatus === 'pending').length;
+
+    /* Counted per person and only among those who can answer at all — the same
+       definition the engine uses to decide a distribution is fully confirmed.
+       Counting entries would read "9 of 8" the moment somebody worked two
+       areas; counting everybody would leave a roster placeholder, who has no
+       account, outstanding for ever. */
+    const counts = tally(ackRows);
+    const required = dist.acknowledgementRequired;
+    const outstanding = required ? counts.pending : 0;
     const byArea = new Map<string, typeof entries>();
     for (const entry of entries) {
       const list = byArea.get(entry.areaId);
@@ -106,16 +122,36 @@ export function DistributionDetailPage() {
               </p>
             </div>
           </Card>
-        ) : awaiting > 0 ? (
-          <Card tone="warning" padding="padded">
+        ) : !required ? null : counts.answerable === 0 ? (
+          <Card padding="padded">
             <div className={ui.inline}>
-              <Icon name="hourglass-medium" size={19} color="var(--color-accent)" />
+              <Icon name="info" size={19} color="var(--color-text-subtle)" />
               <p className={ui.rowMain} style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-                {dist.peopleCount - awaiting} {t('ackLineA')} {dist.peopleCount} {t('ackConfirmed')}
+                {t('ackNobodyToAsk')}
               </p>
             </div>
           </Card>
-        ) : null}
+        ) : (
+          <Card tone={outstanding > 0 ? 'warning' : undefined} padding="padded">
+            <div className={ui.inline}>
+              <Icon
+                name={outstanding > 0 ? 'hourglass-medium' : 'shield-check'}
+                size={19}
+                color={outstanding > 0 ? 'var(--color-accent)' : 'var(--color-text-subtle)'}
+              />
+              <p className={ui.rowMain} style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                {outstanding > 0
+                  ? t('ackTallyLine')
+                      .replace('{done}', String(counts.confirmed))
+                      .replace('{total}', String(counts.answerable))
+                  : t('ackAllIn')}
+                {counts.queried > 0
+                  ? ` · ${t('ackQueriedCount').replace('{n}', String(counts.queried))}`
+                  : ''}
+              </p>
+            </div>
+          </Card>
+        )}
 
         {areas.map((entry) => (
           <RealAreaResultBlock
@@ -125,6 +161,28 @@ export function DistributionDetailPage() {
             method={dist.method}
           />
         ))}
+
+        {/* Who has answered. Snapshot names, so a later rename does not
+            rewrite an old record, and no profile data of any kind. */}
+        {!isDraft && required && ackRows.length > 0 ? (
+          <section className={ui.stackFlush}>
+            <SectionLabel>{t('ackWhoTitle')}</SectionLabel>
+            {ackRows.map((row) => (
+              <ListRow
+                key={row.entryId}
+                title={row.memberName}
+                meta={row.areaName}
+                trailing={
+                  <Badge tone={row.ackStatus === 'acknowledged' ? 'quiet' : undefined}>
+                    {row.canAcknowledge
+                      ? t(ACK_VIEW[row.ackStatus === 'pending' ? 'pending' : row.ackStatus].managerLabel)
+                      : t('ackNoAccount')}
+                  </Badge>
+                }
+              />
+            ))}
+          </section>
+        ) : null}
 
         <p className={ui.note}>
           {t('dRuleVersion')} {dist.ruleVersion} · {t('dEngine')} {dist.engineVersion ?? '—'} ·{' '}

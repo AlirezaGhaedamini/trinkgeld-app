@@ -1415,6 +1415,7 @@ export type Database = {
       }
       member_distributions: {
         Row: {
+          acknowledgement_required: boolean | null
           confirmed_at: string | null
           id: string | null
           method: Database["public"]["Enums"]["rule_method"] | null
@@ -1442,6 +1443,14 @@ export type Database = {
     }
     Functions: {
       accept_invitation: { Args: { p_token: string }; Returns: string }
+      acknowledge_distribution: {
+        Args: {
+          p_distribution_id: string
+          p_note?: string
+          p_status: Database["public"]["Enums"]["entry_ack_status"]
+        }
+        Returns: number
+      }
       acknowledge_entry: {
         Args: {
           p_entry_id: string
@@ -1519,6 +1528,19 @@ export type Database = {
           p_workplace_id: string
         }
         Returns: string
+      }
+      distribution_ack_state: {
+        Args: { p_distribution_id: string }
+        Returns: {
+          ack_status: Database["public"]["Enums"]["entry_ack_status"]
+          acknowledged_at: string
+          area_name: string
+          can_acknowledge: boolean
+          entry_id: string
+          member_id: string
+          member_name: string
+          queried_at: string
+        }[]
       }
       pending_join_requests: {
         Args: { p_workplace_id: string }

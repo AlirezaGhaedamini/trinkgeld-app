@@ -7,6 +7,7 @@ import {
   classifyDistributionError,
   type DistributionFailure,
 } from '@/distribution/errors';
+import type { AckStateRow } from '@/distribution/ack';
 import * as api from '@/distribution/queries';
 import type {
   ActiveRule,
@@ -223,7 +224,25 @@ export function useDistributionHistory() {
     [client, membership],
   );
 
-  return { enabled, status, distributions, refresh, loadDetail };
+  /**
+   * Who has answered, per entry, from the database's own definition of who is
+   * able to answer at all. Kept separate from loadDetail because a manager
+   * opening an old distribution wants the split immediately; the tally is a
+   * second, smaller question.
+   */
+  const loadAckState = useCallback(
+    async (id: string): Promise<AckStateRow[]> => {
+      if (!client) return [];
+      try {
+        return await api.fetchAckState(client, id);
+      } catch {
+        return [];
+      }
+    },
+    [client],
+  );
+
+  return { enabled, status, distributions, refresh, loadDetail, loadAckState };
 }
 
 /**
@@ -286,12 +305,20 @@ export function useMyShare() {
     void refresh();
   }, [enabled, refresh]);
 
+  /**
+   * Answers a whole distribution, not one entry.
+   *
+   * Somebody who worked two areas holds two entries in the same distribution.
+   * The database answers both in one statement from the caller's identity, so
+   * there is no client-side loop to fail halfway and no way for this screen to
+   * report a confirmation that only partly happened.
+   */
   const acknowledge = useCallback(
-    async (entryId: string, next: 'acknowledged' | 'queried', note?: string) => {
+    async (distributionId: string, next: 'acknowledged' | 'queried', note?: string) => {
       if (!client) return { ok: false as const, failure: 'notConfigured' as const };
       setBusy(true);
       try {
-        await api.acknowledgeEntry(client, entryId, next, note);
+        await api.acknowledgeDistribution(client, distributionId, next, note);
         await refresh();
         return { ok: true as const };
       } catch (error) {

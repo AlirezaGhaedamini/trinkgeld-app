@@ -57,6 +57,9 @@ export interface DistributionEntry {
   roundingAdjustmentCents: number;
   shiftIds: string[];
   ackStatus: AckStatus;
+  acknowledgedAt: string | null;
+  queriedAt: string | null;
+  queryNote: string | null;
   /** Only meaningful on the member-facing view. */
   isOwn?: boolean;
 }
@@ -78,6 +81,12 @@ export interface Distribution {
   engineVersion: string | null;
   sentAt: string | null;
   calculatedAt: string | null;
+  /**
+   * Frozen at calculation time, never read from today's rule — a distribution
+   * keeps the requirement it was sent with. The manager reads it out of
+   * rules_snapshot; the member gets it as a column on member_distributions.
+   */
+  acknowledgementRequired: boolean;
 }
 
 export function toPool(row: Tables<'tip_pools'>): TipPool {
@@ -128,6 +137,9 @@ export function toEntry(row: Tables<'tip_distribution_entries'>): DistributionEn
     roundingAdjustmentCents: row.rounding_adjustment_cents,
     shiftIds: row.shift_ids,
     ackStatus: row.ack_status,
+    acknowledgedAt: row.acknowledged_at,
+    queriedAt: row.queried_at,
+    queryNote: row.query_note,
   };
 }
 
@@ -148,7 +160,24 @@ export function toDistribution(row: Tables<'tip_distributions'>): Distribution {
     engineVersion: row.engine_version,
     sentAt: row.sent_at,
     calculatedAt: row.calculated_at,
+    acknowledgementRequired: ackRequiredFromSnapshot(row.rules_snapshot),
   };
+}
+
+/**
+ * The manager's route to the same frozen flag the member's view exposes.
+ *
+ * rules_snapshot is jsonb, so it arrives as `unknown` and is narrowed here
+ * rather than cast at the call site. A snapshot written before the field
+ * existed defaults to true — the safer answer, because it asks for a
+ * confirmation that may not be needed rather than silently dropping one that is.
+ */
+function ackRequiredFromSnapshot(snapshot: unknown): boolean {
+  if (snapshot && typeof snapshot === 'object' && 'acknowledgement_required' in snapshot) {
+    const value = (snapshot as { acknowledgement_required?: unknown }).acknowledgement_required;
+    if (typeof value === 'boolean') return value;
+  }
+  return true;
 }
 
 /**
@@ -173,6 +202,7 @@ export function toMemberDistribution(row: Tables<'member_distributions'>): Distr
     engineVersion: null,
     sentAt: row.sent_at,
     calculatedAt: null,
+    acknowledgementRequired: row.acknowledgement_required ?? true,
   };
 }
 
