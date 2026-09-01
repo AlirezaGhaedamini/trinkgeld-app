@@ -23,7 +23,7 @@ the percentages or the rules and the numbers update.
 lives in `supabase/migrations/` — 16 tables, 16 enums, 44 RLS policies, the
 distribution engine as PostgreSQL functions, and a member read layer that keeps
 employees out of manager-only tables. It has been applied and exercised against
-a real PostgreSQL 16 instance (`supabase/tests/rebuild.sh --test`, now 426
+a real PostgreSQL 16 instance (`supabase/tests/rebuild.sh --test`, now 480
 assertions across the phases below). See **[`docs/BACKEND.md`](docs/BACKEND.md)**.
 
 **Phase 3A — authentication. Complete.** Sign-in, registration, session
@@ -74,6 +74,15 @@ every entry a person holds in a distribution, so somebody who worked two areas
 is never half-confirmed; the requirement is the one frozen into the distribution
 when it was sent; and a confirmation, once given, cannot be quietly withdrawn.
 It is a product-level confirmation of receipt, not a payment record.
+
+**Phase 3I — questions. Complete.** An employee who thinks something is wrong
+says so in a sentence, and it reaches the manager attached to the distribution
+it is about. A question is an open state, not an answer: it stops the
+distribution closing, and it shows in the manager's tally separately from
+confirmed and pending. The manager either answers it — which hands the
+confirmation back to the employee, never confirming on their behalf — or agrees
+a correction is needed, which leaves the share unconfirmed and the sent
+distribution untouched. What was asked can never be edited afterwards.
 
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
@@ -351,6 +360,7 @@ node scripts/rules-check.mjs       # Phase 3E: rule versions, workplace settings
 node scripts/areas-roles-check.mjs # Phase 3F: area and role management, archive policy
 node scripts/members-check.mjs     # Phase 3G: roster, assignments, suspension, join requests
 node scripts/acknowledgement-check.mjs # Phase 3H: confirmation, multi-area entries, tallies
+node scripts/query-check.mjs       # Phase 3I: questions, resolution, cancelled distributions
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test

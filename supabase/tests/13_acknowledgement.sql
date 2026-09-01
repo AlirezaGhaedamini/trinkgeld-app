@@ -329,6 +329,17 @@ select tests.ok(:'a_q_status' = 'queried' and :'a_q_note' = 'I worked later than
 select tests.ok(:'a_q_ack' = :'a_stamp1',
   'K32 …and querying does not erase the moment they had confirmed');
 
+-- Phase 3I: the person who asked cannot answer themselves. The manager
+-- resolves, which puts the entry back to pending, and only then may they
+-- confirm. Asserted properly in 14_query_and_resolution.sql; here it is just
+-- the path back to a clean state for the rest of this file.
+begin;
+  select tests.as_user('ac000000-0000-0000-0000-000000000001');
+  select public.resolve_query(
+    (select id from public.distribution_queries
+      where distribution_id = :'a_dist' and status = 'open' limit 1),
+    'no_correction', 'Checked the roster; the hours are right.');
+commit;
 begin;
   select tests.as_user('ac000000-0000-0000-0000-000000000002');
   select public.acknowledge_entry(:'a_ash_entry', 'acknowledged');

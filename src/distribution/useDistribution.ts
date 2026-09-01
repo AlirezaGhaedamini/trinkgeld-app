@@ -7,7 +7,7 @@ import {
   classifyDistributionError,
   type DistributionFailure,
 } from '@/distribution/errors';
-import type { AckStateRow } from '@/distribution/ack';
+import type { AckStateRow, MyQuery, QueryRow } from '@/distribution/ack';
 import * as api from '@/distribution/queries';
 import type {
   ActiveRule,
@@ -242,7 +242,39 @@ export function useDistributionHistory() {
     [client],
   );
 
-  return { enabled, status, distributions, refresh, loadDetail, loadAckState };
+  const loadQueries = useCallback(
+    async (id: string): Promise<QueryRow[]> => {
+      if (!client) return [];
+      try {
+        return await api.fetchQueries(client, id);
+      } catch {
+        return [];
+      }
+    },
+    [client],
+  );
+
+  const resolveQuery = useCallback(
+    async (
+      queryId: string,
+      outcome: 'no_correction' | 'correction_required',
+      response?: string,
+    ) => {
+      if (!client) return { ok: false as const, failure: 'notConfigured' as const };
+      try {
+        await api.resolveQuery(client, queryId, outcome, response);
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, failure: classifyDistributionError(error) };
+      }
+    },
+    [client],
+  );
+
+  return {
+    enabled, status, distributions, refresh, loadDetail, loadAckState,
+    loadQueries, resolveQuery,
+  };
 }
 
 /**
@@ -259,6 +291,7 @@ export function useMyShare() {
   const [distributions, setDistributions] = useState<Distribution[]>([]);
   const [entries, setEntries] = useState<DistributionEntry[]>([]);
   const [areas, setAreas] = useState<Record<string, DistributionArea[]>>({});
+  const [queries, setQueries] = useState<MyQuery[]>([]);
   const [busy, setBusy] = useState(false);
   const alive = useRef(true);
   useEffect(() => {
@@ -272,9 +305,10 @@ export function useMyShare() {
     if (!client) return;
     setStatus((s) => (s === 'ready' ? s : 'loading'));
     try {
-      const [dists, rows] = await Promise.all([
+      const [dists, rows, mine] = await Promise.all([
         api.fetchMyDistributions(client),
         api.fetchMyEntries(client),
+        api.fetchMyQueries(client),
       ]);
       // Area subtotals only when the workplace released the pool; an empty
       // result is the privacy model working, not a failure.
@@ -287,6 +321,7 @@ export function useMyShare() {
       if (!alive.current) return;
       setDistributions(dists);
       setEntries(rows);
+      setQueries(mine);
       setAreas(byDistribution);
       setStatus('ready');
     } catch {
@@ -298,6 +333,7 @@ export function useMyShare() {
     if (!enabled) {
       setDistributions([]);
       setEntries([]);
+      setQueries([]);
       setAreas({});
       setStatus('idle');
       return;
@@ -330,5 +366,36 @@ export function useMyShare() {
     [client, refresh],
   );
 
-  return { enabled, status, distributions, entries, areas, busy, refresh, acknowledge };
+  /**
+   * Raises a question about a whole distribution. Separate from acknowledge()
+   * because it carries the one thing a confirmation never does — a sentence
+   * saying what looks wrong — and because the database refuses it without one.
+   */
+  const query = useCallback(
+    async (distributionId: string, note: string) => {
+      if (!client) return { ok: false as const, failure: 'notConfigured' as const };
+      setBusy(true);
+      try {
+        await api.queryDistribution(client, distributionId, note);
+        await refresh();
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, failure: classifyDistributionError(error) };
+      } finally {
+        if (alive.current) setBusy(false);
+      }
+    },
+    [client, refresh],
+  );
+
+  /** The caller's own question about one distribution, latest first. */
+  const queryFor = useCallback(
+    (distributionId: string) => queries.find((q) => q.distributionId === distributionId) ?? null,
+    [queries],
+  );
+
+  return {
+    enabled, status, distributions, entries, areas, queries, busy, refresh,
+    acknowledge, query, queryFor,
+  };
 }

@@ -25,7 +25,7 @@
 
 import type { TipCrewClient } from '@/lib/supabase';
 import type { Membership } from '@/workplace/types';
-import type { AckStateRow } from '@/distribution/ack';
+import type { AckStateRow, MyQuery, QueryRow } from '@/distribution/ack';
 import {
   toArea,
   toDistribution,
@@ -491,6 +491,105 @@ export async function fetchAckState(
     queriedAt: r.queried_at,
     canAcknowledge: r.can_acknowledge,
   }));
+}
+
+/**
+ * Raises one question about a whole distribution.
+ *
+ * Same shape as confirming: a distribution id and a sentence, and the database
+ * decides which entries that covers. A member who worked two areas asks once.
+ */
+export async function queryDistribution(
+  client: TipCrewClient,
+  distributionId: string,
+  note: string,
+): Promise<number> {
+  const { data, error } = await client.rpc('query_distribution', {
+    p_distribution_id: distributionId,
+    p_note: note,
+  });
+  if (error) throw error;
+  return typeof data === 'number' ? data : 0;
+}
+
+/** The caller's own questions. RLS returns theirs and nobody else's. */
+export async function fetchMyQueries(client: TipCrewClient): Promise<MyQuery[]> {
+  const { data, error } = await client
+    .from('distribution_queries')
+    .select('id, distribution_id, member_id, member_name, note, raised_at, status, outcome, manager_response, resolved_at')
+    .order('raised_at', { ascending: false })
+    .limit(100);
+  if (error) return [];
+  return (data ?? []).map(toMyQuery);
+}
+
+/** Every question on one distribution, for the manager who has to answer them. */
+export async function fetchQueries(
+  client: TipCrewClient,
+  distributionId: string,
+): Promise<QueryRow[]> {
+  const { data, error } = await client.rpc('distribution_query_list', {
+    p_distribution_id: distributionId,
+  });
+  if (error) throw error;
+  return (
+    (data ?? []) as unknown as Array<{
+      query_id: string; member_id: string; member_name: string; note: string;
+      raised_at: string; status: 'open' | 'resolved';
+      outcome: 'no_correction' | 'correction_required' | null;
+      manager_response: string | null; resolved_at: string | null; amount_cents: number;
+    }>
+  ).map((r) => ({
+    id: r.query_id,
+    distributionId,
+    memberId: r.member_id,
+    memberName: r.member_name,
+    note: r.note,
+    raisedAt: r.raised_at,
+    status: r.status,
+    outcome: r.outcome,
+    managerResponse: r.manager_response,
+    resolvedAt: r.resolved_at,
+    amountCents: r.amount_cents,
+  }));
+}
+
+/**
+ * The manager's answer. `no_correction` hands the confirmation back to the
+ * employee; `correction_required` records that the manager agrees and leaves
+ * the entries queried, because the sent distribution is never edited in place.
+ */
+export async function resolveQuery(
+  client: TipCrewClient,
+  queryId: string,
+  outcome: 'no_correction' | 'correction_required',
+  response?: string,
+): Promise<void> {
+  const { error } = await client.rpc('resolve_query', {
+    p_query_id: queryId,
+    p_outcome: outcome,
+    ...(response ? { p_response: response } : {}),
+  });
+  if (error) throw error;
+}
+
+function toMyQuery(row: {
+  id: string; distribution_id: string; member_id: string; member_name: string;
+  note: string; raised_at: string; status: string; outcome: string | null;
+  manager_response: string | null; resolved_at: string | null;
+}): MyQuery {
+  return {
+    id: row.id,
+    distributionId: row.distribution_id,
+    memberId: row.member_id,
+    memberName: row.member_name,
+    note: row.note,
+    raisedAt: row.raised_at,
+    status: row.status as MyQuery['status'],
+    outcome: row.outcome as MyQuery['outcome'],
+    managerResponse: row.manager_response,
+    resolvedAt: row.resolved_at,
+  };
 }
 
 export async function acknowledgeEntry(

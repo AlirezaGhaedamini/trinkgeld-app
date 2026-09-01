@@ -1,6 +1,6 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
-import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icon';
 import { Note } from '@/components/ui/Note';
@@ -9,7 +9,11 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { distributionById, latestDistribution, shareOf } from '@/state/selectors';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
-import { ACK_VIEW, ackViewFor, acknowledgedAtFor } from '@/distribution/ack';
+import { ACK_VIEW, QUERY_NOTE_MAX, ackViewFor, acknowledgedAtFor } from '@/distribution/ack';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Sheet } from '@/components/ui/Sheet';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import { useMyShare } from '@/distribution/useDistribution';
 import ui from '@/components/ui/ui.module.css';
 import styles from '@/pages/pages.module.css';
@@ -21,6 +25,10 @@ import styles from '@/pages/pages.module.css';
  * arithmetic that produced it — the screen the whole product exists for.
  */
 export function PayoutPage() {
+  /* The question sheet's own state. Declared here because hooks cannot live
+     inside the real/demo branch below, which is a plain `if`. */
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState('');
   const state = useAppState();
   const dispatch = useAppDispatch();
   const { t, money, num, percent, hours, area, dateFor, day, language } = useI18n();
@@ -68,7 +76,8 @@ export function PayoutPage() {
 
     // The requirement is the one frozen into this distribution, not today's
     // rule — an old payout keeps asking, or not asking, exactly what it did.
-    const ackView = ackViewFor(ownEntries, realDistribution.acknowledgementRequired);
+    const myQuery = mine.queryFor(realDistribution.id);
+    const ackView = ackViewFor(ownEntries, realDistribution.acknowledgementRequired, myQuery);
     const presentation = ACK_VIEW[ackView];
     const canAnswer = presentation.showCta && realDistribution.status !== 'cancelled';
     const answeredAt = acknowledgedAtFor(ownEntries);
@@ -80,6 +89,22 @@ export function PayoutPage() {
         }
         return true;
       });
+
+    const trimmed = note.trim();
+    const sendQuestion = async () => {
+      if (trimmed.length === 0) {
+        show(t('qErrEmpty'));
+        return;
+      }
+      const result = await mine.query(realDistribution.id, trimmed);
+      if (!result.ok) {
+        show(t(DISTRIBUTION_FAILURE_KEY[result.failure ?? 'unknown']));
+        return;
+      }
+      setAsking(false);
+      setNote('');
+      show(t('qSent'));
+    };
 
     const steps: Array<{
       step: string; label: string; value: string; math: string; dot: string; glow: string;
@@ -141,14 +166,9 @@ export function PayoutPage() {
                     navigate(-1);
                   });
                 },
-                secondary: {
-                  label: t('query'),
-                  onClick: () => {
-                    void answer('queried').then((ok) => {
-                      if (ok) show(t('queryToast'));
-                    });
-                  },
-                },
+                secondary: presentation.showQuery
+                  ? { label: t('qCta'), onClick: () => setAsking(true) }
+                  : undefined,
               }
             : undefined
         }
@@ -230,6 +250,68 @@ export function PayoutPage() {
                 : t('ackRequiredNote')}
           </Note>
         </div>
+
+        {/* The exchange, once there has been one: their words, then the
+            manager's. Kept on the payout it is about, so it stays with the
+            distribution rather than in an inbox somewhere. */}
+        {myQuery ? (
+          <div className={ui.stackTight}>
+            <SectionLabel>{t('qYourQuestion')}</SectionLabel>
+            <Card padding="padded">
+              <div className={ui.stackTight}>
+                <p className={ui.noteBody} style={{ fontSize: 14, color: 'var(--color-text)' }}>
+                  {myQuery.note}
+                </p>
+                <p className={ui.rowMeta}>
+                  {t('qAskedOn').replace('{when}', day(new Date(myQuery.raisedAt)))}
+                </p>
+              </div>
+            </Card>
+            {myQuery.status === 'resolved' ? (
+              <>
+                <SectionLabel>{t('qManagerAnswer')}</SectionLabel>
+                <Card padding="padded">
+                  <div className={ui.stackTight}>
+                    <p className={ui.noteBody} style={{ fontSize: 14, color: 'var(--color-text)' }}>
+                      {myQuery.managerResponse ??
+                        t(myQuery.outcome === 'correction_required'
+                          ? 'qMgrCorrection' : 'qMgrNoCorrection')}
+                    </p>
+                    {myQuery.resolvedAt ? (
+                      <p className={ui.rowMeta}>{day(new Date(myQuery.resolvedAt))}</p>
+                    ) : null}
+                  </div>
+                </Card>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Asking is a sentence, not a form. */}
+        <Sheet open={asking} title={t('qTitle')} onClose={() => setAsking(false)}>
+          <div className={ui.stackTight}>
+            <label className={ui.fieldLabel} htmlFor="query-note">
+              {t('qNoteLabel')}
+            </label>
+            <textarea
+              id="query-note"
+              className={ui.fieldInput}
+              rows={4}
+              maxLength={QUERY_NOTE_MAX}
+              placeholder={t('qNotePlaceholder')}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              style={{ resize: 'none', lineHeight: 1.5, paddingTop: 10, height: 'auto' }}
+            />
+            <Note>{t('qHint')}</Note>
+            <Button muted={mine.busy || trimmed.length === 0} onClick={() => void sendQuestion()}>
+              {t('qSend')}
+            </Button>
+            <Button variant="ghost" onClick={() => setAsking(false)}>
+              {t('qCancel')}
+            </Button>
+          </div>
+        </Sheet>
       </Screen>
     );
   }

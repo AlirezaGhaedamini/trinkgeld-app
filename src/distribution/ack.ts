@@ -16,17 +16,37 @@
 import type { StringKey } from '@/i18n/strings';
 import type { AckStatus, DistributionEntry } from '@/distribution/types';
 
-/** What a screen shows. Not the same set as the database's three values. */
-export type AckView = 'notRequired' | 'pending' | 'acknowledged' | 'queried';
+/**
+ * What a screen shows. Not the same set as the database's three values.
+ *
+ * `queried` splits in two once the manager has answered: `awaitingReconfirm`
+ * is an entry put back to pending after "no correction needed", and
+ * `correctionPending` is one the manager agreed is wrong and is redoing. The
+ * database distinguishes them by entry state plus the query's outcome; the
+ * screens should never work that out for themselves.
+ */
+export type AckView =
+  | 'notRequired'
+  | 'pending'
+  | 'acknowledged'
+  | 'queried'
+  | 'awaitingReconfirm'
+  | 'correctionPending';
 
 interface AckPresentation {
   /** The employee's own wording — "you confirmed this". */
   label: StringKey;
   /** The manager's wording for one person's row. */
   managerLabel: StringKey;
-  /** Whether the employee is still being asked for something. */
+  /** Whether the employee is still being asked to confirm. */
   showCta: boolean;
-  /** Whether this counts as answered for the manager's tally. */
+  /** Whether the employee may still raise a question from here. */
+  showQuery: boolean;
+  /**
+   * Whether this counts as settled. A question is NOT settled: it is an open
+   * problem the manager has to look at, and counting it as answered was the
+   * defect Phase 3I was opened to fix.
+   */
   answered: boolean;
   tone: 'accent' | 'subtle' | 'warning';
 }
@@ -36,6 +56,7 @@ export const ACK_VIEW: Record<AckView, AckPresentation> = {
     label: 'ackNotRequired',
     managerLabel: 'ackNotRequired',
     showCta: false,
+    showQuery: false,
     answered: true,
     tone: 'subtle',
   },
@@ -43,6 +64,7 @@ export const ACK_VIEW: Record<AckView, AckPresentation> = {
     label: 'needsOK',
     managerLabel: 'ackRowPending',
     showCta: true,
+    showQuery: true,
     answered: false,
     tone: 'accent',
   },
@@ -50,6 +72,7 @@ export const ACK_VIEW: Record<AckView, AckPresentation> = {
     label: 'acknowledged',
     managerLabel: 'ackRowConfirmed',
     showCta: false,
+    showQuery: false,
     answered: true,
     tone: 'subtle',
   },
@@ -57,7 +80,24 @@ export const ACK_VIEW: Record<AckView, AckPresentation> = {
     label: 'ackQueried',
     managerLabel: 'ackRowQueried',
     showCta: false,
-    answered: true,
+    showQuery: false,
+    answered: false,
+    tone: 'warning',
+  },
+  awaitingReconfirm: {
+    label: 'ackResolvedLabel',
+    managerLabel: 'ackRowResolved',
+    showCta: true,
+    showQuery: true,
+    answered: false,
+    tone: 'accent',
+  },
+  correctionPending: {
+    label: 'ackCorrectionLabel',
+    managerLabel: 'ackRowCorrection',
+    showCta: false,
+    showQuery: false,
+    answered: false,
     tone: 'warning',
   },
 };
@@ -73,11 +113,23 @@ export const ACK_VIEW: Record<AckView, AckPresentation> = {
 export function ackViewFor(
   entries: DistributionEntry[],
   acknowledgementRequired: boolean,
+  query?: MyQuery | null,
 ): AckView {
   if (!acknowledgementRequired) return 'notRequired';
   if (entries.length === 0) return 'notRequired';
-  if (entries.some((e) => e.ackStatus === 'pending')) return 'pending';
-  if (entries.some((e) => e.ackStatus === 'queried')) return 'queried';
+
+  if (entries.some((e) => e.ackStatus === 'queried')) {
+    // Still queried after the manager answered means they agreed something is
+    // wrong: the correction is coming, and there is nothing to confirm.
+    return query?.status === 'resolved' && query.outcome === 'correction_required'
+      ? 'correctionPending'
+      : 'queried';
+  }
+  if (entries.some((e) => e.ackStatus === 'pending')) {
+    // Back to pending with an answered question behind it is a different thing
+    // to say than plain "needs your OK".
+    return query?.status === 'resolved' ? 'awaitingReconfirm' : 'pending';
+  }
   return 'acknowledged';
 }
 
@@ -89,6 +141,33 @@ export function acknowledgedAtFor(entries: DistributionEntry[]): string | null {
     .sort();
   return stamps[0] ?? null;
 }
+
+/**
+ * The employee's own question about one distribution, as they can read it back
+ * from `distribution_queries` — their words, and the manager's answer if one
+ * has been given.
+ */
+export interface MyQuery {
+  id: string;
+  distributionId: string;
+  memberId: string;
+  memberName: string;
+  note: string;
+  raisedAt: string;
+  status: 'open' | 'resolved';
+  outcome: 'no_correction' | 'correction_required' | null;
+  managerResponse: string | null;
+  resolvedAt: string | null;
+}
+
+/** One question as the manager reads it, from `distribution_query_list`. */
+export interface QueryRow extends MyQuery {
+  /** What this person was paid across every area, so the manager sees the stake. */
+  amountCents: number;
+}
+
+/** The longest a question or an answer may be, matching the column checks. */
+export const QUERY_NOTE_MAX = 500;
 
 /** A row of the manager's per-entry state, as `distribution_ack_state` returns it. */
 export interface AckStateRow {
@@ -111,6 +190,12 @@ export interface AckTally {
   confirmed: number;
   queried: number;
   pending: number;
+  /**
+   * Everyone who still owes an answer or has asked a question — the number the
+   * manager has to act on. Confirmed is NOT its complement when somebody has
+   * queried, which is exactly the arithmetic Phase 3I had to correct.
+   */
+  outstanding: number;
 }
 
 /**
@@ -138,5 +223,8 @@ export function tally(rows: AckStateRow[]): AckTally {
     else if (list.some((r) => r.ackStatus === 'queried')) queried += 1;
     else confirmed += 1;
   }
-  return { participants: byMember.size, answerable, confirmed, queried, pending };
+  return {
+    participants: byMember.size, answerable, confirmed, queried, pending,
+    outstanding: pending + queried,
+  };
 }

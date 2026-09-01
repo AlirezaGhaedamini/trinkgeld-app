@@ -58,6 +58,7 @@ each one is independently reviewable.
 | `…001900_area_role_management.sql` | creating, renaming, reordering, archiving and restoring areas and roles — see below |
 | `…002000_member_tenancy_and_requests.sql` | a membership's area and role must be its own workplace's, and the role must belong to that area; the manager's join-request queue — see below |
 | `…002100_acknowledgement.sql` | the frozen requirement on the member's view, one action per distribution, and the two doors made to refuse the same things — see below |
+| `…002200_query_and_resolution.sql` | the query loop: a question is an open state, it has somewhere to go, and a cancelled distribution stops accepting answers — see below |
 
 ---
 
@@ -543,6 +544,61 @@ the auto-confirm in both RPCs ignores, so the manager's tally and the engine's
 decision to close a distribution are derived from one definition rather than
 two. Counting entries instead of people would read "9 of 8 confirmed" the moment
 somebody worked two areas.
+
+---
+
+## 4f. The query loop (migration 22)
+
+Phase 3H gave an employee two answers and nowhere for the second to go. This
+migration gives it somewhere, and corrects four things the audit found.
+
+**A question was not counted as open.** `acknowledge_entry()` and
+`acknowledge_distribution()` counted only `pending` when deciding whether a
+distribution was fully answered, so one person disputing their share still let
+it flip to `confirmed`. `app.open_answers()` now counts `pending` **or**
+`queried`, and both RPCs and the manager's tally read it.
+
+**An employee could answer their own question.** Nothing stopped a `queried`
+entry going back to `acknowledged` by the person who raised it. Confirming is
+refused while the entry is queried — keyed on the entry's own state, not on
+whether a query row is open, because the two outcomes below need to differ.
+
+**A cancelled distribution was writable.** `app.distribution_is_published()`
+means "not a draft" and was answering both "may be read" and "may be answered".
+`app.distribution_is_actionable()` is the second question — `sent` or
+`confirmed` only — and the entries UPDATE policy is republished to use it. A
+cancelled distribution stays visible and stops taking answers.
+
+**There was nowhere to record what the manager did.** `distribution_queries`
+holds one row per member per distribution — never per entry, because somebody
+who worked two areas asks one question about their share. It carries the
+employee's note, a snapshot of their name, and the manager's outcome, response
+and timestamp. `app.guard_query_immutable()` refuses any change to the note,
+the member, the distribution or the moment it was asked, and it has **no
+trusted-context escape**: not even the definer functions may rewrite what
+somebody asked.
+
+### The lifecycle
+
+    pending ──confirm──> acknowledged
+    pending ──ask──────> queried ──manager: no correction──> pending ──confirm──> acknowledged
+                                 └─manager: correction ────> queried (stays)
+
+`resolve_query(query, 'no_correction', response)` puts that member's entries
+back to `pending`, so they confirm for themselves — a manager never marks anybody
+acknowledged. `'correction_required'` records that the manager agrees something
+is wrong and deliberately leaves the entries queried: nobody should be asked to
+confirm a share their manager believes is wrong, and the sent distribution is
+never edited in place. Replacing it is Phase 3J.
+
+`distribution_query_list(distribution)` is the manager's reader — snapshot names
+and the amount at stake, no profile data. Employees read their own row straight
+from the table through the `queries_select` policy; there is deliberately no
+insert, update or delete policy, so every write goes through a definer function.
+
+Both the queries table and updates to `tip_distribution_entries` are audited by
+the existing `app.write_audit()` trigger, so asking, answering and confirming
+all land in `audit_log` with actor and timestamp.
 
 ---
 

@@ -14,7 +14,10 @@ import { useToast } from '@/hooks/useToast';
 import { distributionById, resultForDistribution } from '@/state/selectors';
 import { colorForAreaKey } from '@/data/areas';
 import { useDistributionHistory } from '@/distribution/useDistribution';
-import { ACK_VIEW, tally, type AckStateRow } from '@/distribution/ack';
+import { ACK_VIEW, QUERY_NOTE_MAX, tally, type AckStateRow, type QueryRow } from '@/distribution/ack';
+import { Sheet } from '@/components/ui/Sheet';
+import { Note } from '@/components/ui/Note';
+import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
 import type { DistributionDetail } from '@/distribution/types';
 import { Badge } from '@/components/ui/Badge';
 import { ListRow } from '@/components/ui/ListRow';
@@ -34,6 +37,10 @@ export function DistributionDetailPage() {
   const real = history.enabled;
   const [detail, setDetail] = useState<DistributionDetail | null>(null);
   const [ackRows, setAckRows] = useState<AckStateRow[]>([]);
+  const [queries, setQueries] = useState<QueryRow[]>([]);
+  const [answering, setAnswering] = useState<QueryRow | null>(null);
+  const [response, setResponse] = useState('');
+  const [reload, setReload] = useState(0);
 
   /**
    * Read back, never recomputed.
@@ -51,10 +58,13 @@ export function DistributionDetailPage() {
     void history.loadAckState(distributionId).then((rows) => {
       if (!cancelled) setAckRows(rows);
     });
+    void history.loadQueries(distributionId).then((rows) => {
+      if (!cancelled) setQueries(rows);
+    });
     return () => {
       cancelled = true;
     };
-  }, [real, distributionId, history.loadDetail, history.loadAckState]);
+  }, [real, distributionId, reload, history.loadDetail, history.loadAckState, history.loadQueries]);
 
   if (real) {
     if (!detail) {
@@ -75,7 +85,23 @@ export function DistributionDetailPage() {
        account, outstanding for ever. */
     const counts = tally(ackRows);
     const required = dist.acknowledgementRequired;
-    const outstanding = required ? counts.pending : 0;
+    /* A question is an open problem, not an answer — so it counts towards what
+       the manager still has to deal with, and never towards "confirmed". */
+    const outstanding = required ? counts.outstanding : 0;
+    const openQueries = queries.filter((q) => q.status === 'open');
+
+    const answer = async (outcome: 'no_correction' | 'correction_required') => {
+      if (!answering) return;
+      const result = await history.resolveQuery(answering.id, outcome, response.trim() || undefined);
+      if (!result.ok) {
+        show(t(DISTRIBUTION_FAILURE_KEY[result.failure ?? 'unknown']));
+        return;
+      }
+      setAnswering(null);
+      setResponse('');
+      setReload((n) => n + 1);
+      show(t('qResolvedToast'));
+    };
     const byArea = new Map<string, typeof entries>();
     for (const entry of entries) {
       const list = byArea.get(entry.areaId);
@@ -148,6 +174,9 @@ export function DistributionDetailPage() {
                 {counts.queried > 0
                   ? ` · ${t('ackQueriedCount').replace('{n}', String(counts.queried))}`
                   : ''}
+                {counts.pending > 0 && counts.queried > 0
+                  ? ` · ${counts.pending} ${t('ackRowPending').toLowerCase()}`
+                  : ''}
               </p>
             </div>
           </Card>
@@ -161,6 +190,50 @@ export function DistributionDetailPage() {
             method={dist.method}
           />
         ))}
+
+        {/* Questions first: they are the thing that needs a person, and burying
+            them under the per-entry list would be the same dead end again. */}
+        {queries.length > 0 ? (
+          <section className={ui.stackTight}>
+            <SectionLabel meta={openQueries.length > 0 ? t('qMgrOpen') : t('qMgrResolved')}>
+              {t('qMgrTitle')}
+            </SectionLabel>
+            {queries.map((q) => (
+              <Card key={q.id} padding="padded" tone={q.status === 'open' ? 'warning' : undefined}>
+                <div className={ui.stackTight}>
+                  <p className={ui.rowTitle}>
+                    {q.memberName}
+                    <span className={ui.rowMeta} style={{ marginLeft: 8 }}>
+                      {money(q.amountCents / 100)}
+                    </span>
+                  </p>
+                  <p className={ui.noteBody} style={{ fontSize: 14, color: 'var(--color-text)' }}>
+                    {q.note}
+                  </p>
+                  <p className={ui.rowMeta}>
+                    {t('qAskedOn').replace('{when}', day(new Date(q.raisedAt)))}
+                  </p>
+                  {q.status === 'resolved' ? (
+                    <Note>
+                      {t(q.outcome === 'correction_required' ? 'qMgrCorrection' : 'qMgrNoCorrection')}
+                      {q.managerResponse ? ` — ${q.managerResponse}` : ''}
+                    </Note>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setAnswering(q);
+                        setResponse('');
+                      }}
+                    >
+                      {t('qMgrResolve')}
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </section>
+        ) : null}
 
         {/* Who has answered. Snapshot names, so a later rename does not
             rewrite an old record, and no profile data of any kind. */}
@@ -188,6 +261,44 @@ export function DistributionDetailPage() {
           {t('dRuleVersion')} {dist.ruleVersion} · {t('dEngine')} {dist.engineVersion ?? '—'} ·{' '}
           {dist.minOverlapMinutes} {t('minutesShort')}
         </p>
+
+        {/* Two outcomes, and the second one says plainly that the sent
+            distribution is not going to be edited. */}
+        <Sheet
+          open={answering !== null}
+          title={answering?.memberName ?? t('qMgrTitle')}
+          onClose={() => setAnswering(null)}
+        >
+          <div className={ui.stackTight}>
+            <Card padding="padded">
+              <p className={ui.noteBody} style={{ fontSize: 14, color: 'var(--color-text)' }}>
+                {answering?.note}
+              </p>
+            </Card>
+
+            <label className={ui.fieldLabel} htmlFor="query-response">
+              {t('qMgrResponseLabel')}
+            </label>
+            <textarea
+              id="query-response"
+              className={ui.fieldInput}
+              rows={3}
+              maxLength={QUERY_NOTE_MAX}
+              placeholder={t('qMgrResponsePlaceholder')}
+              value={response}
+              onChange={(event) => setResponse(event.target.value)}
+              style={{ resize: 'none', lineHeight: 1.5, paddingTop: 10, height: 'auto' }}
+            />
+
+            <Button onClick={() => void answer('no_correction')}>{t('qMgrNoCorrection')}</Button>
+            <Note>{t('qMgrNoCorrectionHelp')}</Note>
+
+            <Button variant="ghost" onClick={() => void answer('correction_required')}>
+              {t('qMgrCorrection')}
+            </Button>
+            <Note>{t('qMgrCorrectionHelp')}</Note>
+          </div>
+        </Sheet>
       </Screen>
     );
   }

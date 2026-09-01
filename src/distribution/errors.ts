@@ -27,6 +27,13 @@ export type DistributionFailure =
   | 'ackNotYours'
   | 'ackSuspended'
   | 'ackTakeBack'
+  | 'queryEmpty'
+  | 'queryLong'
+  | 'queryAnswered'
+  | 'queryStillOpen'
+  | 'queryCorrection'
+  | 'queryNotYours'
+  | 'notActionable'
   | 'network'
   | 'notConfigured'
   | 'unknown';
@@ -51,6 +58,13 @@ export const DISTRIBUTION_FAILURE_KEY: Record<DistributionFailure, StringKey> = 
   ackNotYours: 'ackErrNotYours',
   ackSuspended: 'ackErrSuspended',
   ackTakeBack: 'ackErrTakeBack',
+  queryEmpty: 'qErrEmpty',
+  queryLong: 'qErrLong',
+  queryAnswered: 'qErrAnswered',
+  queryStillOpen: 'qErrStillOpen',
+  queryCorrection: 'qErrCorrection',
+  queryNotYours: 'qErrNotYours',
+  notActionable: 'qErrNotOpen',
   network: 'authNetwork',
   notConfigured: 'authNotConfigured',
   unknown: 'authUnknown',
@@ -91,8 +105,17 @@ export function classifyDistributionError(error: unknown): DistributionFailure {
     return 'network';
   }
 
-  // Acknowledgement first: these all carry 42501, which the catch-all below
-  // would otherwise report as "you are not a manager".
+  // Acknowledgement and the query loop first: these all carry 42501 or 22023,
+  // which the catch-alls below would otherwise report as "you are not a
+  // manager" or swallow entirely.
+  if (message.includes('needs a sentence saying what looks wrong')) return 'queryEmpty';
+  if (message.includes('is too long')) return 'queryLong';
+  if (message.includes('already been answered')) return 'queryAnswered';
+  if (message.includes('your question is still open')) return 'queryStillOpen';
+  if (message.includes('is correcting this one')) return 'queryCorrection';
+  if (message.includes('question not found')) return 'queryNotYours';
+  if (message.includes('cannot be edited') || message.includes('is not reopened')) return 'queryNotYours';
+  if (message.includes('not open for answers')) return 'notActionable';
   if (message.includes('has not been sent yet')) return 'ackNotSent';
   if (message.includes('access to this workplace is paused')) return 'ackSuspended';
   if (message.includes('cannot be taken back')) return 'ackTakeBack';

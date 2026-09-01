@@ -89,6 +89,90 @@ export type Database = {
           },
         ]
       }
+      distribution_queries: {
+        Row: {
+          created_at: string
+          distribution_id: string
+          id: string
+          manager_response: string | null
+          member_id: string
+          member_name: string
+          note: string
+          outcome: Database["public"]["Enums"]["query_outcome"] | null
+          raised_at: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: Database["public"]["Enums"]["query_status"]
+          workplace_id: string
+        }
+        Insert: {
+          created_at?: string
+          distribution_id: string
+          id?: string
+          manager_response?: string | null
+          member_id: string
+          member_name: string
+          note: string
+          outcome?: Database["public"]["Enums"]["query_outcome"] | null
+          raised_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["query_status"]
+          workplace_id: string
+        }
+        Update: {
+          created_at?: string
+          distribution_id?: string
+          id?: string
+          manager_response?: string | null
+          member_id?: string
+          member_name?: string
+          note?: string
+          outcome?: Database["public"]["Enums"]["query_outcome"] | null
+          raised_at?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["query_status"]
+          workplace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "distribution_queries_distribution_id_fkey"
+            columns: ["distribution_id"]
+            isOneToOne: false
+            referencedRelation: "member_distributions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "distribution_queries_distribution_id_fkey"
+            columns: ["distribution_id"]
+            isOneToOne: false
+            referencedRelation: "tip_distributions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "distribution_queries_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "workplace_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "distribution_queries_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "workplace_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "distribution_queries_workplace_id_fkey"
+            columns: ["workplace_id"]
+            isOneToOne: false
+            referencedRelation: "workplaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       distribution_rule_areas: {
         Row: {
           area_id: string
@@ -1542,6 +1626,21 @@ export type Database = {
           queried_at: string
         }[]
       }
+      distribution_query_list: {
+        Args: { p_distribution_id: string }
+        Returns: {
+          amount_cents: number
+          manager_response: string
+          member_id: string
+          member_name: string
+          note: string
+          outcome: Database["public"]["Enums"]["query_outcome"]
+          query_id: string
+          raised_at: string
+          resolved_at: string
+          status: Database["public"]["Enums"]["query_status"]
+        }[]
+      }
       pending_join_requests: {
         Args: { p_workplace_id: string }
         Returns: {
@@ -1550,6 +1649,10 @@ export type Database = {
           requested_at: string
           requester_name: string
         }[]
+      }
+      query_distribution: {
+        Args: { p_distribution_id: string; p_note: string }
+        Returns: number
       }
       reorder_workplace_areas: {
         Args: { p_ids: string[]; p_workplace_id: string }
@@ -1560,6 +1663,14 @@ export type Database = {
         Returns: undefined
       }
       request_join: { Args: { p_join_code: string }; Returns: string }
+      resolve_query: {
+        Args: {
+          p_outcome: Database["public"]["Enums"]["query_outcome"]
+          p_query_id: string
+          p_response?: string
+        }
+        Returns: undefined
+      }
       restore_workplace_area: {
         Args: { p_area_id: string }
         Returns: undefined
@@ -1591,6 +1702,8 @@ export type Database = {
       peer_visibility: "none" | "area" | "workplace"
       pool_period: "shift" | "day" | "week" | "custom"
       pool_status: "open" | "locked" | "distributed" | "void"
+      query_outcome: "no_correction" | "correction_required"
+      query_status: "open" | "resolved"
       rule_adopted_by: "employer" | "staff_agreement" | "works_council"
       rule_method: "hours_points" | "hours" | "equal"
       rule_status: "draft" | "active" | "superseded"
@@ -1743,6 +1856,8 @@ export const Constants = {
       peer_visibility: ["none", "area", "workplace"],
       pool_period: ["shift", "day", "week", "custom"],
       pool_status: ["open", "locked", "distributed", "void"],
+      query_outcome: ["no_correction", "correction_required"],
+      query_status: ["open", "resolved"],
       rule_adopted_by: ["employer", "staff_agreement", "works_council"],
       rule_method: ["hours_points", "hours", "equal"],
       rule_status: ["draft", "active", "superseded"],
