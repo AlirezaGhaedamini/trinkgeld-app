@@ -306,7 +306,11 @@ select points as hist_points from public.tip_distribution_entries where id = :'e
 begin;
   select tests.as_user('d0000000-0000-0000-0000-000000000001');
   update public.workplace_roles set points = 4.50 where id = :'r_server';
-  update public.workplace_members set area_id = :'a_bar' where id = :'m_ann';
+  -- Migration 20 requires the default role to belong to the default area, so
+  -- the move clears it: "no default role" is legal, and the engine falls back
+  -- to the first role of the effective area.
+  update public.workplace_members set area_id = :'a_bar', workplace_role_id = null
+    where id = :'m_ann';
   select id as rule4 from public.create_rule_draft(:'wid') as t(id) \gset
   update public.distribution_rules set min_overlap_minutes = 240 where id = :'rule4';
   update public.distribution_rule_areas set percentage = 100 where rule_id = :'rule4' and area_id = :'a_bar';

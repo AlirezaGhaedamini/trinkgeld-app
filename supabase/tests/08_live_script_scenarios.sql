@@ -151,7 +151,10 @@ delete from public.distribution_rules where id = :'lr_sw';
 -- pairwise branch — so she is dropped, and only her partner is left.
 begin;
   select tests.as_user('d0000000-0000-0000-0000-000000000001');
-  update public.workplace_members set area_id = :'l_bar' where id = :'l_b';   -- the contamination
+  -- Migration 20 requires the role to belong to the area, so the move clears
+  -- it; the engine falls back to the first role of the effective area.
+  update public.workplace_members set area_id = :'l_bar', workplace_role_id = null
+    where id = :'l_b';   -- the contamination
   insert into public.shifts (workplace_id, member_id, starts_at, ends_at, break_minutes, status)
   values (:'lw', :'l_b', '2019-05-08 16:00Z', '2019-05-08 20:00Z', 0, 'approved'),
          (:'lw', :'l_c', '2019-05-08 19:00Z', '2019-05-08 23:00Z', 0, 'approved'),
@@ -183,7 +186,8 @@ select tests.ok(
 -- The same day, with nobody stranded in a zero-share area: a real chain.
 begin;
   select tests.as_user('d0000000-0000-0000-0000-000000000001');
-  update public.workplace_members set area_id = :'l_service' where id = :'l_b';  -- the fix
+  update public.workplace_members set area_id = :'l_service', workplace_role_id = :'l_server'
+    where id = :'l_b';  -- the fix
   insert into public.shifts (workplace_id, member_id, starts_at, ends_at, break_minutes, status)
   values (:'lw', :'l_b', '2019-05-12 16:00Z', '2019-05-12 20:00Z', 0, 'approved'),
          (:'lw', :'l_c', '2019-05-12 19:00Z', '2019-05-12 23:00Z', 0, 'approved'),
@@ -281,7 +285,10 @@ begin;
     where rule_id = :'lr_60' and area_id not in (:'l_service', :'l_bar');
   select public.activate_rule(:'lr_60');
 
-  update public.workplace_members set area_id = :'l_bar' where id = :'l_b';   -- the contamination
+  -- Migration 20 requires the role to belong to the area, so the move clears
+  -- it; the engine falls back to the first role of the effective area.
+  update public.workplace_members set area_id = :'l_bar', workplace_role_id = null
+    where id = :'l_b';   -- the contamination
   insert into public.shifts (workplace_id, member_id, starts_at, ends_at, break_minutes, status)
   values (:'lw', :'l_a', '2019-05-10 18:00Z', '2019-05-10 22:00Z', 0, 'approved'),
          (:'lw', :'l_b', '2019-05-10 18:00Z', '2019-05-10 22:00Z', 0, 'approved');
@@ -301,7 +308,8 @@ select tests.ok(
 -- Bar genuinely empty.
 begin;
   select tests.as_user('d0000000-0000-0000-0000-000000000001');
-  update public.workplace_members set area_id = :'l_service' where id = :'l_b';  -- the fix
+  update public.workplace_members set area_id = :'l_service', workplace_role_id = :'l_server'
+    where id = :'l_b';  -- the fix
   insert into public.shifts (workplace_id, member_id, starts_at, ends_at, break_minutes, status)
   values (:'lw', :'l_a', '2019-05-14 18:00Z', '2019-05-14 22:00Z', 0, 'approved'),
          (:'lw', :'l_b', '2019-05-14 18:00Z', '2019-05-14 22:00Z', 0, 'approved');

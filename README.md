@@ -23,8 +23,8 @@ the percentages or the rules and the numbers update.
 lives in `supabase/migrations/` — 16 tables, 16 enums, 44 RLS policies, the
 distribution engine as PostgreSQL functions, and a member read layer that keeps
 employees out of manager-only tables. It has been applied and exercised against
-a real PostgreSQL 16 instance (`supabase/tests/rebuild.sh --test`, 85
-assertions). See **[`docs/BACKEND.md`](docs/BACKEND.md)**.
+a real PostgreSQL 16 instance (`supabase/tests/rebuild.sh --test`, now 381
+assertions across the phases below). See **[`docs/BACKEND.md`](docs/BACKEND.md)**.
 
 **Phase 3A — authentication. Complete.** Sign-in, registration, session
 persistence, logout and route protection run on Supabase Auth. Profiles are
@@ -48,6 +48,25 @@ by the database from the team's reports, the split is calculated by
 `calculate_distribution()`, finalised by `send_distribution()` and read back
 from the stored record. The client-side engine is a preview only: on €10 split
 three ways it loses a cent, which is exactly why the database is authoritative.
+
+**Phase 3E — rules editor and workplace settings. Complete.** A rule is edited
+as a draft and published by `activate_rule()`, which freezes the areas, roles and
+points it used; a distribution that has been sent keeps pointing at the version
+it was calculated under. Area shares, the weighting method, the minimum overlap,
+the overlap basis and the rounding area are all set here, with a warning before
+publishing anything that would leave someone at zero.
+
+**Phase 3F — areas and roles. Complete.** Creating, renaming, reordering,
+archiving and restoring the vocabulary a workplace divides tips by. Archiving is
+refused while anything live points at it and the manager is told what to move
+first; renaming never disturbs history, because every distribution stores the
+names and points it used.
+
+**Phase 3G — the team. Complete.** The roster, the member editor, join-request
+approval and invitations. A default area and role are written together so the
+pair is always coherent, the weighting is bounded by the database, removal is a
+standing rather than a deletion so the financial trail keeps pointing at
+somebody, and a workplace can never lose its last active manager.
 
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
@@ -323,6 +342,7 @@ node scripts/shifts-check.mjs      # Phase 3C: shifts, review columns, tip repor
 node scripts/distribution-check.mjs # Phase 3D: pools, calculation, finalisation, history
 node scripts/rules-check.mjs       # Phase 3E: rule versions, workplace settings, tenancy
 node scripts/areas-roles-check.mjs # Phase 3F: area and role management, archive policy
+node scripts/members-check.mjs     # Phase 3G: roster, assignments, suspension, join requests
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test

@@ -56,6 +56,7 @@ each one is independently reviewable.
 | `…001700_calc_no_unqualified_update.sql` | removes the one write with no WHERE clause — see below |
 | `…001800_rule_tenancy_guard.sql` | a rule's areas, roles and rounding area must belong to its own workplace — see below |
 | `…001900_area_role_management.sql` | creating, renaming, reordering, archiving and restoring areas and roles — see below |
+| `…002000_member_tenancy_and_requests.sql` | a membership's area and role must be its own workplace's, and the role must belong to that area; the manager's join-request queue — see below |
 
 ---
 
@@ -443,6 +444,55 @@ an area can only reach `archived` while its share is already zero.
 Names are unique among *live* rows only, so an archived "Bar" and a new "Bar" can
 coexist; the new one takes the key `bar_2`, because archived rows keep theirs.
 `app.slugify()` derives the key from the name (`Späti Küche` → `spaeti_kueche`).
+
+---
+
+## 4d. Memberships (migration 20)
+
+Migration 19 made an area and a role things a manager edits. Migration 20 makes
+sure the pair a membership holds is coherent, and gives the manager a way to see
+who is asking to come in.
+
+`app.guard_member_tenancy()` (BEFORE INSERT OR UPDATE, `SECURITY DEFINER`)
+refuses three things by comparing ids, never names:
+
+* an `area_id` belonging to another workplace,
+* a `workplace_role_id` belonging to another workplace,
+* a role that does not belong to the member's own area.
+
+The third is why the app writes `area_id` and `workplace_role_id` in a **single**
+UPDATE. Sending the area alone would leave the old role behind and be refused;
+sending the role alone would be refused for the same reason. One statement moves
+both, and a refusal leaves nothing half-applied.
+
+`app.guard_member_dates()` (BEFORE UPDATE) protects `joined_at` and `left_at`
+from anyone who is not a manager of that workplace. It is `SECURITY INVOKER` on
+purpose: `accept_invitation()` and `approve_join_request()` stamp `joined_at`
+while running as the person joining, who is not a manager, and
+`app.is_trusted_context()` only reports the truth when `current_user` is the
+caller rather than the table owner.
+
+Trigger order on `workplace_members` is alphabetical, and deliberately so:
+
+    workplace_members_dates      → dates are manager-only
+    workplace_members_guard      → may you change this column at all
+    workplace_members_live_refs  → is what you are pointing at archived
+    workplace_members_tenancy    → is it even this workplace's, and this area's
+
+so the manager is told the most specific true thing, in that order: not allowed,
+then archived, then wrong workplace or wrong area.
+
+`public.pending_join_requests(workplace)` returns `invitation_id`,
+`requested_at`, `requester_name` and `proposed_area_id` for the pending
+`join_request` rows of one workplace. It is `SECURITY DEFINER` because the
+requester's name lives in `profiles`, which no manager may read; it returns the
+name and nothing else — no email, no token, no user id. It **raises** for a
+non-manager rather than returning an empty set, because "there is nothing" and
+"you may not look" are different answers and the caller deserves the true one.
+
+Nothing here creates a membership. `approve_join_request()` still hard-codes
+`'employee'`, and `accept_invitation()` still takes the role from the invitation
+row, so no value a joining person controls can produce a manager.
 
 ---
 

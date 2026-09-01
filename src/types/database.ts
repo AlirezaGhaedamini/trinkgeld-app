@@ -1520,6 +1520,15 @@ export type Database = {
         }
         Returns: string
       }
+      pending_join_requests: {
+        Args: { p_workplace_id: string }
+        Returns: {
+          invitation_id: string
+          proposed_area_id: string
+          requested_at: string
+          requester_name: string
+        }[]
+      }
       reorder_workplace_areas: {
         Args: { p_ids: string[]; p_workplace_id: string }
         Returns: undefined
