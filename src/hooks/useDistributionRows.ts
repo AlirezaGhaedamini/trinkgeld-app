@@ -64,14 +64,19 @@ export function useDistributionRows(options: { chips?: boolean } = {}): HistoryR
       // required is not "waiting", and never was.
       const view = ackViewFor(own, distribution.acknowledgementRequired);
       const presentation = ACK_VIEW[view];
+      // A replaced payout is history: it says so instead of asking for a
+      // confirmation nobody can give any more.
+      const replaced = Boolean(distribution.supersededBy);
       return {
         id: distribution.id,
         date: day(new Date(`${distribution.periodStart}T12:00:00`)),
         meta: `${own[0]?.areaName ?? ''} · ${hours(minutes / 60)}`.replace(/^ · /, ''),
         amount: money(amountCents / 100),
-        status: t(presentation.label),
+        status: replaced ? t('corrReplaced') : t(presentation.label),
         statusColor:
-          presentation.tone === 'subtle' ? 'var(--color-text-subtle)' : 'var(--color-accent)',
+          replaced || presentation.tone === 'subtle'
+            ? 'var(--color-text-subtle)'
+            : 'var(--color-accent)',
         chip: undefined,
         onOpen: () => navigate(`/payout/${distribution.id}`),
       };

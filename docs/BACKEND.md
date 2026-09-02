@@ -59,6 +59,7 @@ each one is independently reviewable.
 | `…002000_member_tenancy_and_requests.sql` | a membership's area and role must be its own workplace's, and the role must belong to that area; the manager's join-request queue — see below |
 | `…002100_acknowledgement.sql` | the frozen requirement on the member's view, one action per distribution, and the two doors made to refuse the same things — see below |
 | `…002200_query_and_resolution.sql` | the query loop: a question is an open state, it has somewhere to go, and a cancelled distribution stops accepting answers — see below |
+| `…002300_replacement_distribution.sql` | correcting a sent distribution by replacing it: lineage, one live payout per pool, no forks and no loops — see below |
 
 ---
 
@@ -599,6 +600,79 @@ insert, update or delete policy, so every write goes through a definer function.
 Both the queries table and updates to `tip_distribution_entries` are audited by
 the existing `app.write_audit()` trigger, so asking, answering and confirming
 all land in `audit_log` with actor and timestamp.
+
+---
+
+## 4g. Replacement distributions (migration 23)
+
+Phase 3I could record "yes, this is wrong" and stop. This is where that finding
+goes.
+
+### The money question, first
+
+A replacement **reuses the original's pool**. That is the whole
+double-counting defence, and it is structural rather than a rule anyone has to
+remember: `tip_pool_sources_report_key` is unique on `tip_report_id`, so a tip
+report funds exactly one pool, for ever. The original and its replacement are
+two descriptions of one pool — one money event — and only one of them is ever
+live. Building a second pool from the same reports is refused by that index.
+
+The audit found the hole this closes. `calculate_distribution()` would run again
+on a pool that had already been sent, producing a second distribution with no
+lineage to the first; both read as current and both were funded by the same
+reports. A pool that has paid out may now only be recalculated as an explicit
+replacement of the distribution that paid it, named through a transaction-local
+setting that `create_replacement_distribution()` sets and the engine
+re-validates against that very pool. It is the same mechanism `app.audit_reason`
+has always used, and the setting alone grants nothing.
+
+### What `supersedes_id` means
+
+The column has existed since Phase 2 and had never been written. It sits on the
+**new** row and points **backwards**: *this distribution supersedes that one*.
+So each row has at most one predecessor by construction, and
+`distributions_one_live_replacement` — unique on `supersedes_id` where the row
+is not cancelled — gives it at most one live successor. A chain, never a fork:
+
+    A  <-  B  <-  C
+    (cancelled) (cancelled) (sent)
+
+`distributions_no_self_supersede` refuses a self-reference, and
+`app.guard_distribution_lineage()` walks the ancestry on every write and refuses
+a loop. That guard also refuses any client write to `supersedes_id` or
+`trigger_query_id`: lineage is written by the engine, and by nothing else.
+
+### One live payout, and one draft beside it
+
+Phase 2 held `unique (tip_pool_id) where status in ('draft','sent','confirmed')`.
+That is split here into one index for `sent`/`confirmed` and one for `draft`.
+The guarantee is unchanged — a pool still pays out once — but a correction can
+now be calculated and read *beside* the distribution it is going to replace,
+instead of forcing the manager to retire the original before seeing the
+corrected figures.
+
+### The original's fate
+
+`cancelled`, not a new enum value. It is already non-actionable everywhere
+(`app.distribution_is_actionable`), already visible in `member_distributions`,
+and already understood by every screen. What makes it a *replacement* rather
+than an abandonment is that something supersedes it, which the UI reads from
+`superseded_by` and renders as "Replaced". A new status would have bought a word
+and cost a change to every path that switches on status.
+
+`send_distribution()` retires the predecessor **before** publishing the
+successor — the paid-per-pool index is checked per statement, not at commit, so
+the other order collides with the very row being retired. Both writes are in one
+transaction, so no reader sees the gap, and none sees two live payouts either.
+
+### Correcting the inputs
+
+Nothing edits a sent distribution. The manager fixes the authoritative source —
+a shift, an area, a role, a weighting, the rule — and the replacement is
+calculated fresh from it. A shift that has been paid out is locked by the engine,
+so correcting one is a deliberate act: unlock, correct, then recalculate. The
+ordinary stale-input fingerprint applies unchanged; a correction is not a reason
+to send arithmetic that no longer matches the hours.
 
 ---
 

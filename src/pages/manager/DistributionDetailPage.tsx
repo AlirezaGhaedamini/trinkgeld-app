@@ -14,7 +14,10 @@ import { useToast } from '@/hooks/useToast';
 import { distributionById, resultForDistribution } from '@/state/selectors';
 import { colorForAreaKey } from '@/data/areas';
 import { useDistributionHistory } from '@/distribution/useDistribution';
-import { ACK_VIEW, QUERY_NOTE_MAX, tally, type AckStateRow, type QueryRow } from '@/distribution/ack';
+import {
+  ACK_VIEW, QUERY_NOTE_MAX, correctionDeltas, lineageOf, tally,
+  type AckStateRow, type CorrectionDelta, type QueryRow,
+} from '@/distribution/ack';
 import { Sheet } from '@/components/ui/Sheet';
 import { Note } from '@/components/ui/Note';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
@@ -41,6 +44,8 @@ export function DistributionDetailPage() {
   const [answering, setAnswering] = useState<QueryRow | null>(null);
   const [response, setResponse] = useState('');
   const [reload, setReload] = useState(0);
+  const [supersededBy, setSupersededBy] = useState<string | null>(null);
+  const [deltas, setDeltas] = useState<CorrectionDelta[] | null>(null);
 
   /**
    * Read back, never recomputed.
@@ -61,10 +66,31 @@ export function DistributionDetailPage() {
     void history.loadQueries(distributionId).then((rows) => {
       if (!cancelled) setQueries(rows);
     });
+    void history.loadSupersededBy(distributionId).then((id) => {
+      if (!cancelled) setSupersededBy(id);
+    });
     return () => {
       cancelled = true;
     };
-  }, [real, distributionId, reload, history.loadDetail, history.loadAckState, history.loadQueries]);
+  }, [real, distributionId, reload, history.loadDetail, history.loadAckState,
+      history.loadQueries, history.loadSupersededBy]);
+
+  /* What the correction changed, per person. Both sides are immutable rows, so
+     this is read twice and compared — never stored, never recalculated. */
+  useEffect(() => {
+    if (!real || !detail?.distribution.supersedesId) {
+      setDeltas(null);
+      return;
+    }
+    let cancelled = false;
+    void history.loadDetail(detail.distribution.supersedesId).then((prev) => {
+      if (cancelled || !prev) return;
+      setDeltas(correctionDeltas(prev.entries, detail.entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [real, detail, history.loadDetail]);
 
   if (real) {
     if (!detail) {
@@ -89,6 +115,26 @@ export function DistributionDetailPage() {
        the manager still has to deal with, and never towards "confirmed". */
     const outstanding = required ? counts.outstanding : 0;
     const openQueries = queries.filter((q) => q.status === 'open');
+    const lineage = lineageOf({
+      status: dist.status,
+      supersedesId: dist.supersedesId,
+      supersededBy,
+    });
+    /* A correction can be prepared once a question has been answered with "a
+       correction is needed" and nothing has replaced this one yet. */
+    const correctable =
+      queries.some((q) => q.status === 'resolved' && q.outcome === 'correction_required') &&
+      (dist.status === 'sent' || dist.status === 'confirmed') &&
+      !supersededBy;
+
+    const startCorrection = async () => {
+      const result = await history.createReplacement(dist.id);
+      if (!result.ok) {
+        show(t(DISTRIBUTION_FAILURE_KEY[result.failure ?? 'unknown']));
+        return;
+      }
+      if (result.value) navigate(`/manager/distributions/${result.value}`);
+    };
 
     const answer = async (outcome: 'no_correction' | 'correction_required') => {
       if (!answering) return;
@@ -190,6 +236,115 @@ export function DistributionDetailPage() {
             method={dist.method}
           />
         ))}
+
+        {/* Where this sits in its chain, and the way forward from here. */}
+        {lineage === 'replaced' ? (
+          <Card padding="padded">
+            <div className={ui.stackTight}>
+              <Badge tone="quiet">{t('corrReplaced')}</Badge>
+              <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                {t('corrReplacedNote')}
+              </p>
+              <Button
+                variant="secondary"
+                onClick={() => navigate(`/manager/distributions/${supersededBy}`)}
+              >
+                {t('corrSeeReplacement')}
+              </Button>
+            </div>
+          </Card>
+        ) : null}
+
+        {dist.supersedesId ? (
+          <Card padding="padded">
+            <div className={ui.stackTight}>
+              <Badge tone="quiet">{t('corrCorrected')}</Badge>
+              <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                {isDraft ? t('corrDraftNote') : t('corrOfNote')}
+              </p>
+              <Button
+                variant="secondary"
+                onClick={() => navigate(`/manager/distributions/${dist.supersedesId}`)}
+              >
+                {t('corrSeeOriginal')}
+              </Button>
+            </div>
+          </Card>
+        ) : null}
+
+        {/* What the correction changed, per person — a comparison of two
+            immutable records, never a recalculation of the old one. */}
+        {deltas && deltas.length > 0 ? (
+          <section className={ui.stackFlush}>
+            <SectionLabel>{t('corrWhatChanged')}</SectionLabel>
+            {deltas.map((d) => (
+              <ListRow
+                key={d.memberId}
+                title={d.memberName}
+                meta={`${t('corrOriginalAmount')} ${money(d.beforeCents / 100)} · ${t('corrNewAmount')} ${money(d.afterCents / 100)}`}
+                trailing={
+                  <span
+                    className="tabular"
+                    style={{
+                      color:
+                        d.deltaCents === 0
+                          ? 'var(--color-text-subtle)'
+                          : d.deltaCents > 0
+                            ? 'var(--color-money)'
+                            : 'var(--color-warning)',
+                    }}
+                  >
+                    {d.deltaCents === 0
+                      ? t('corrNoChange')
+                      : `${d.deltaCents > 0 ? '+' : '−'}${money(Math.abs(d.deltaCents) / 100)}`}
+                  </span>
+                }
+              />
+            ))}
+          </section>
+        ) : null}
+
+        {correctable ? (
+          <Button variant="secondary" onClick={() => void startCorrection()}>
+            {t('corrStart')}
+          </Button>
+        ) : null}
+
+        {/* A draft correction has to be sendable from here, or the flow dead-ends
+            on the screen that shows it. Recalculate is beside it, because the
+            stale-input refusal is the one thing likely to send a manager back. */}
+        {isDraft && dist.supersedesId ? (
+          <div className={ui.stackTight}>
+            <Button
+              onClick={() => {
+                void history.send(dist.id).then((r) => {
+                  if (!r.ok) {
+                    show(t(DISTRIBUTION_FAILURE_KEY[r.failure ?? 'unknown']));
+                    return;
+                  }
+                  show(t('dSentLabel'));
+                  setReload((n) => n + 1);
+                });
+              }}
+            >
+              {t('corrSend')}
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                void history.createReplacement(dist.supersedesId as string).then((r) => {
+                  if (!r.ok) {
+                    show(t(DISTRIBUTION_FAILURE_KEY[r.failure ?? 'unknown']));
+                    return;
+                  }
+                  if (r.value) navigate(`/manager/distributions/${r.value}`);
+                });
+              }}
+            >
+              {t('corrRecalculate')}
+            </Button>
+          </div>
+        ) : null}
 
         {/* Questions first: they are the thing that needs a person, and burying
             them under the per-entry list would be the same dead end again. */}

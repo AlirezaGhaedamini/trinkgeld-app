@@ -87,6 +87,12 @@ export interface Distribution {
    * rules_snapshot; the member gets it as a column on member_distributions.
    */
   acknowledgementRequired: boolean;
+  /** The distribution this one corrects, if it is a correction. */
+  supersedesId: string | null;
+  /** The correction that replaced this one, once that correction was sent. */
+  supersededBy: string | null;
+  /** The question whose answer caused this correction. */
+  triggerQueryId: string | null;
 }
 
 export function toPool(row: Tables<'tip_pools'>): TipPool {
@@ -161,6 +167,11 @@ export function toDistribution(row: Tables<'tip_distributions'>): Distribution {
     sentAt: row.sent_at,
     calculatedAt: row.calculated_at,
     acknowledgementRequired: ackRequiredFromSnapshot(row.rules_snapshot),
+    supersedesId: row.supersedes_id,
+    // The manager reads the other direction with a second query; a row does not
+    // know what replaced it.
+    supersededBy: null,
+    triggerQueryId: row.trigger_query_id,
   };
 }
 
@@ -203,6 +214,9 @@ export function toMemberDistribution(row: Tables<'member_distributions'>): Distr
     sentAt: row.sent_at,
     calculatedAt: null,
     acknowledgementRequired: row.acknowledgement_required ?? true,
+    supersedesId: row.supersedes_id,
+    supersededBy: row.superseded_by,
+    triggerQueryId: null,
   };
 }
 

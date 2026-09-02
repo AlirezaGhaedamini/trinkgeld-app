@@ -34,6 +34,10 @@ export type DistributionFailure =
   | 'queryCorrection'
   | 'queryNotYours'
   | 'notActionable'
+  | 'corrNeedsQuery'
+  | 'corrAlready'
+  | 'corrNotCorrectable'
+  | 'poolSpent'
   | 'network'
   | 'notConfigured'
   | 'unknown';
@@ -65,6 +69,10 @@ export const DISTRIBUTION_FAILURE_KEY: Record<DistributionFailure, StringKey> = 
   queryCorrection: 'qErrCorrection',
   queryNotYours: 'qErrNotYours',
   notActionable: 'qErrNotOpen',
+  corrNeedsQuery: 'corrNeedsQuery',
+  corrAlready: 'corrAlready',
+  corrNotCorrectable: 'corrNotCorrectable',
+  poolSpent: 'corrPoolSpent',
   network: 'authNetwork',
   notConfigured: 'authNotConfigured',
   unknown: 'authUnknown',
@@ -108,6 +116,11 @@ export function classifyDistributionError(error: unknown): DistributionFailure {
   // Acknowledgement and the query loop first: these all carry 42501 or 22023,
   // which the catch-alls below would otherwise report as "you are not a
   // manager" or swallow entirely.
+  if (message.includes('says it needs correcting')) return 'corrNeedsQuery';
+  if (message.includes('already been corrected')) return 'corrAlready';
+  if (message.includes('already been replaced or cancelled')) return 'corrNotCorrectable';
+  if (message.includes('a draft is corrected by recalculating')) return 'corrNotCorrectable';
+  if (message.includes('already been distributed')) return 'poolSpent';
   if (message.includes('needs a sentence saying what looks wrong')) return 'queryEmpty';
   if (message.includes('is too long')) return 'queryLong';
   if (message.includes('already been answered')) return 'queryAnswered';

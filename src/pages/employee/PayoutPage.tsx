@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/useToast';
 import { distributionById, latestDistribution, shareOf } from '@/state/selectors';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
 import { ACK_VIEW, QUERY_NOTE_MAX, ackViewFor, acknowledgedAtFor } from '@/distribution/ack';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Sheet } from '@/components/ui/Sheet';
@@ -45,9 +46,14 @@ export function PayoutPage() {
      is recalculated against today's rules, which is why an old payout still
      explains itself after the rules change. */
   if (real) {
+    /* Without an id this screen shows the current share, which is the newest
+       distribution that has not been replaced — never a superseded one. With an
+       id it shows exactly what was asked for, so an older version stays
+       reachable from history. */
+    const current = mine.distributions.find((d) => !d.supersededBy) ?? mine.distributions[0];
     const realDistribution =
       (distributionId ? mine.distributions.find((d) => d.id === distributionId) : undefined) ??
-      mine.distributions[0];
+      current;
 
     if (mine.status === 'loading') {
       return (
@@ -250,6 +256,40 @@ export function PayoutPage() {
                 : t('ackRequiredNote')}
           </Note>
         </div>
+
+        {/* Where this sits if it was corrected, or is itself a correction. The
+            original is never hidden — it is what they were told at the time. */}
+        {realDistribution.supersededBy ? (
+          <Card padding="padded" tone="warning">
+            <div className={ui.stackTight}>
+              <Badge tone="quiet">{t('corrReplaced')}</Badge>
+              <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                {t('corrEmpReplaced')}
+              </p>
+              <Button
+                variant="secondary"
+                onClick={() => navigate(`/payout/${realDistribution.supersededBy}`)}
+              >
+                {t('corrSeeReplacement')}
+              </Button>
+            </div>
+          </Card>
+        ) : realDistribution.supersedesId ? (
+          <Card padding="padded">
+            <div className={ui.stackTight}>
+              <Badge tone="quiet">{t('corrCorrected')}</Badge>
+              <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                {t('corrEmpCurrent')}
+              </p>
+              <Button
+                variant="secondary"
+                onClick={() => navigate(`/payout/${realDistribution.supersedesId}`)}
+              >
+                {t('corrSeeOriginal')}
+              </Button>
+            </div>
+          </Card>
+        ) : null}
 
         {/* The exchange, once there has been one: their words, then the
             manager's. Kept on the payout it is about, so it stays with the

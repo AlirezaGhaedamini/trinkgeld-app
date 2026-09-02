@@ -228,3 +228,74 @@ export function tally(rows: AckStateRow[]): AckTally {
     outstanding: pending + queried,
   };
 }
+
+/* ── corrections ─────────────────────────────────────────────────────────── */
+
+/**
+ * How a distribution stands in its correction chain.
+ *
+ * `replaced` is derived from lineage, not from a status: the row is `cancelled`
+ * like any other cancellation, and what makes it a replacement rather than an
+ * abandonment is that something supersedes it. Reading it from `supersededBy`
+ * keeps one truth instead of a status that could disagree with the chain.
+ */
+export type LineageView = 'original' | 'replaced' | 'correction' | 'cancelled';
+
+export function lineageOf(d: {
+  status: string;
+  supersedesId: string | null;
+  supersededBy: string | null;
+}): LineageView {
+  if (d.supersededBy) return 'replaced';
+  if (d.status === 'cancelled') return 'cancelled';
+  return d.supersedesId ? 'correction' : 'original';
+}
+
+export const LINEAGE_LABEL: Record<LineageView, StringKey | null> = {
+  original: null,
+  replaced: 'corrReplaced',
+  correction: 'corrCorrected',
+  cancelled: 'dCancelledLabel',
+};
+
+/** One person's total across however many areas they hold in a distribution. */
+export function totalFor(
+  entries: Array<{ memberId: string; amountCents: number }>,
+  memberId: string,
+): number {
+  return entries
+    .filter((e) => e.memberId === memberId)
+    .reduce((sum, e) => sum + e.amountCents, 0);
+}
+
+export interface CorrectionDelta {
+  memberId: string;
+  memberName: string;
+  beforeCents: number;
+  afterCents: number;
+  deltaCents: number;
+}
+
+/**
+ * What the correction changed, per person.
+ *
+ * Compared by member and not by entry, because a correction may move somebody
+ * between areas: the entry ids and even the area set need not match between the
+ * two versions. Derived for display only — nothing is stored, and both sides
+ * are read from immutable rows.
+ */
+export function correctionDeltas(
+  before: Array<{ memberId: string; memberName: string; amountCents: number }>,
+  after: Array<{ memberId: string; memberName: string; amountCents: number }>,
+): CorrectionDelta[] {
+  const names = new Map<string, string>();
+  for (const e of [...before, ...after]) names.set(e.memberId, e.memberName);
+
+  const out: CorrectionDelta[] = [];
+  for (const [memberId, memberName] of names) {
+    const beforeCents = totalFor(before, memberId);
+    const afterCents = totalFor(after, memberId);
+    out.push({ memberId, memberName, beforeCents, afterCents, deltaCents: afterCents - beforeCents });
+  }
+  return out.sort((a, b) => a.memberName.localeCompare(b.memberName));
+}

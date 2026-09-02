@@ -23,7 +23,7 @@ the percentages or the rules and the numbers update.
 lives in `supabase/migrations/` — 16 tables, 16 enums, 44 RLS policies, the
 distribution engine as PostgreSQL functions, and a member read layer that keeps
 employees out of manager-only tables. It has been applied and exercised against
-a real PostgreSQL 16 instance (`supabase/tests/rebuild.sh --test`, now 480
+a real PostgreSQL 16 instance (`supabase/tests/rebuild.sh --test`, now 534
 assertions across the phases below). See **[`docs/BACKEND.md`](docs/BACKEND.md)**.
 
 **Phase 3A — authentication. Complete.** Sign-in, registration, session
@@ -83,6 +83,14 @@ confirmed and pending. The manager either answers it — which hands the
 confirmation back to the employee, never confirming on their behalf — or agrees
 a correction is needed, which leaves the share unconfirmed and the sent
 distribution untouched. What was asked can never be edited afterwards.
+
+**Phase 3J — corrections. Complete.** When the manager agrees a payout is wrong,
+the fix is a replacement, not an edit. The original keeps every cent it had and
+becomes history, marked "Replaced"; a corrected version is calculated fresh from
+the fixed hours, linked back to what it replaces and to the question that caused
+it, and confirmed from scratch. The correction reuses the original's pool, so a
+tip report can never fund two payouts — and a pool that has paid out cannot be
+distributed again except as an explicit replacement.
 
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
@@ -361,6 +369,7 @@ node scripts/areas-roles-check.mjs # Phase 3F: area and role management, archive
 node scripts/members-check.mjs     # Phase 3G: roster, assignments, suspension, join requests
 node scripts/acknowledgement-check.mjs # Phase 3H: confirmation, multi-area entries, tallies
 node scripts/query-check.mjs       # Phase 3I: questions, resolution, cancelled distributions
+node scripts/replacement-check.mjs # Phase 3J: corrections, lineage, one payout per pool
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test

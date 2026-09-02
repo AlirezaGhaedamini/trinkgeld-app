@@ -839,6 +839,7 @@ export type Database = {
           status: Database["public"]["Enums"]["distribution_status"]
           supersedes_id: string | null
           tip_pool_id: string
+          trigger_query_id: string | null
           workplace_id: string
         }
         Insert: {
@@ -869,6 +870,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["distribution_status"]
           supersedes_id?: string | null
           tip_pool_id: string
+          trigger_query_id?: string | null
           workplace_id: string
         }
         Update: {
@@ -899,6 +901,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["distribution_status"]
           supersedes_id?: string | null
           tip_pool_id?: string
+          trigger_query_id?: string | null
           workplace_id?: string
         }
         Relationships: [
@@ -949,6 +952,13 @@ export type Database = {
             columns: ["tip_pool_id"]
             isOneToOne: false
             referencedRelation: "tip_pools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tip_distributions_trigger_query_id_fkey"
+            columns: ["trigger_query_id"]
+            isOneToOne: false
+            referencedRelation: "distribution_queries"
             referencedColumns: ["id"]
           },
           {
@@ -1512,9 +1522,25 @@ export type Database = {
           rule_version: number | null
           sent_at: string | null
           status: Database["public"]["Enums"]["distribution_status"] | null
+          superseded_by: string | null
+          supersedes_id: string | null
           workplace_id: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "tip_distributions_supersedes_id_fkey"
+            columns: ["supersedes_id"]
+            isOneToOne: false
+            referencedRelation: "member_distributions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tip_distributions_supersedes_id_fkey"
+            columns: ["supersedes_id"]
+            isOneToOne: false
+            referencedRelation: "tip_distributions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tip_distributions_workplace_id_fkey"
             columns: ["workplace_id"]
@@ -1582,6 +1608,10 @@ export type Database = {
           p_period_start: string
           p_workplace_id: string
         }
+        Returns: string
+      }
+      create_replacement_distribution: {
+        Args: { p_original_id: string }
         Returns: string
       }
       create_rule_draft: { Args: { p_workplace_id: string }; Returns: string }

@@ -592,6 +592,38 @@ function toMyQuery(row: {
   };
 }
 
+/**
+ * Starts a correction: the database recalculates the original's own pool as a
+ * fresh draft, linked back to what it replaces. Nothing is sent.
+ */
+export async function createReplacement(
+  client: TipCrewClient,
+  originalId: string,
+): Promise<string> {
+  const { data, error } = await client.rpc('create_replacement_distribution', {
+    p_original_id: originalId,
+  });
+  if (error) throw error;
+  return typeof data === 'string' ? data : '';
+}
+
+/** The correction that replaced this distribution, if one has been sent. */
+export async function fetchSupersededBy(
+  client: TipCrewClient,
+  distributionId: string,
+): Promise<string | null> {
+  const { data, error } = await client
+    .from('tip_distributions')
+    .select('id')
+    .eq('supersedes_id', distributionId)
+    // The live successor: a draft correction has replaced nothing yet, and a
+    // cancelled one was abandoned.
+    .in('status', ['sent', 'confirmed'])
+    .limit(1);
+  if (error) return null;
+  return data?.[0]?.id ?? null;
+}
+
 export async function acknowledgeEntry(
   client: TipCrewClient,
   entryId: string,

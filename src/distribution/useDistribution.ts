@@ -271,9 +271,44 @@ export function useDistributionHistory() {
     [client],
   );
 
+  /** Starts a correction and returns the draft's id. */
+  const createReplacement = useCallback(
+    async (originalId: string) => {
+      if (!client) return { ok: false as const, failure: 'notConfigured' as const };
+      try {
+        const id = await api.createReplacement(client, originalId);
+        await refresh();
+        return { ok: true as const, value: id };
+      } catch (error) {
+        return { ok: false as const, failure: classifyDistributionError(error) };
+      }
+    },
+    [client, refresh],
+  );
+
+  const loadSupersededBy = useCallback(
+    async (id: string) => (client ? api.fetchSupersededBy(client, id) : null),
+    [client],
+  );
+
+  /** Publishes a draft. The stale-input check lives in the database. */
+  const send = useCallback(
+    async (id: string) => {
+      if (!client) return { ok: false as const, failure: 'notConfigured' as const };
+      try {
+        await api.sendDistribution(client, id);
+        await refresh();
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, failure: classifyDistributionError(error) };
+      }
+    },
+    [client, refresh],
+  );
+
   return {
     enabled, status, distributions, refresh, loadDetail, loadAckState,
-    loadQueries, resolveQuery,
+    loadQueries, resolveQuery, createReplacement, loadSupersededBy, send,
   };
 }
 
