@@ -8,6 +8,7 @@ import { useAppState } from '@/hooks/useAppState';
 import { useDistributionRows } from '@/hooks/useDistributionRows';
 import { useI18n } from '@/hooks/useI18n';
 import { useDistributionHistory } from '@/distribution/useDistribution';
+import { PAYOUT_METHOD_LABEL } from '@/distribution/ack';
 import { colorForAreaKey } from '@/data/areas';
 import ui from '@/components/ui/ui.module.css';
 import styles from '@/pages/pages.module.css';
@@ -17,7 +18,7 @@ type Filter = 'all' | 'pending' | 'confirmed';
 /** Every distribution the workplace has sent, filterable by state. */
 export function DistributionsPage() {
   const state = useAppState();
-  const { t } = useI18n();
+  const { t, money } = useI18n();
   const rows = useDistributionRows();
   const [params, setParams] = useSearchParams();
 
@@ -39,6 +40,22 @@ export function DistributionsPage() {
             ? distribution.status === 'draft' || distribution.status === 'sent'
             : distribution.status === 'confirmed',
       );
+
+    /**
+     * The payout line for one row. A first payout reads "Paid €300.00 cash"; a
+     * correction reads "Correction settled: +€0.00" against the version the
+     * lineage already paid, never its own full total.
+     */
+    const settlementLine = (id: string) => {
+      const s = history.settlements[id];
+      if (!s) return null;
+      if (s.payoutStatus !== 'paid') return t('poHistoryUnpaid');
+      const amount = money((s.payoutAmountCents ?? 0) / 100);
+      const how = s.payoutMethod ? ` ${t(PAYOUT_METHOD_LABEL[s.payoutMethod])}` : '';
+      return s.settledEntitlementCents !== 0
+        ? `${t('poHistoryCorrection').replace('{amount}', amount)}${how}`
+        : `${t('poHistoryPaid').replace('{amount}', amount)}${how}`;
+    };
 
     return (
       <Screen title={t('distributions')} titleSize={26} back={false} aboveTabs>
@@ -78,6 +95,19 @@ export function DistributionsPage() {
                     >
                       {row.status}
                     </span>
+                    {/* What was calculated is above; what was handed over is
+                        here. Kept apart on purpose: reading two versions of one
+                        night as two payments is the mistake this line exists to
+                        prevent, so a correction shows its settlement, not its
+                        total. */}
+                    {settlementLine(distribution.id) ? (
+                      <span
+                        className={ui.rowMeta}
+                        style={{ display: 'block', marginTop: 2 }}
+                      >
+                        {settlementLine(distribution.id)}
+                      </span>
+                    ) : null}
                   </span>
                 </div>
                 <BandBar

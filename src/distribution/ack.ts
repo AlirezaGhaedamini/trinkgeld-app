@@ -14,6 +14,7 @@
  */
 
 import type { StringKey } from '@/i18n/strings';
+import type { PayoutMethod } from '@/distribution/types';
 import type { AckStatus, DistributionEntry } from '@/distribution/types';
 
 /**
@@ -363,4 +364,42 @@ export function correctionSourceOf(d: {
   if (!d.supersedesId) return null;
   if (d.triggerQueryId) return 'employeeQuery';
   return d.correctionReason ? 'manager' : null;
+}
+
+/* ── payout ──────────────────────────────────────────────────────────────── */
+
+/**
+ * How the money was handed over. Only what a restaurant can answer without
+ * thinking; `other` keeps the list short instead of growing it per workplace.
+ */
+export const PAYOUT_METHODS: PayoutMethod[] = ['cash', 'payroll', 'bank_transfer', 'other'];
+
+export const PAYOUT_METHOD_LABEL: Record<PayoutMethod, StringKey> = {
+  cash: 'poMethodCash',
+  payroll: 'poMethodPayroll',
+  bank_transfer: 'poMethodBank',
+  other: 'poMethodOther',
+};
+
+export const PAYOUT_NOTE_MAX = 500;
+
+/**
+ * One person's correction difference, from the two records they can already
+ * read: their share on this version, and their share on the version the
+ * workplace actually settled.
+ *
+ * Returns null when there is nothing to compare — either the lineage was never
+ * settled, or this is not a correction at all — so the screen can say nothing
+ * rather than say zero.
+ */
+export function ownDifference(
+  currentCents: number,
+  settledCents: number | null,
+): { current: number; previous: number; difference: number } | null {
+  if (settledCents === null) return null;
+  return {
+    current: currentCents,
+    previous: settledCents,
+    difference: currentCents - settledCents,
+  };
 }

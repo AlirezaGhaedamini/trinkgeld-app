@@ -41,6 +41,11 @@ export type DistributionFailure =
   | 'corrNeedsReason'
   | 'corrReasonLong'
   | 'corrDoubleReason'
+  | 'payoutAlready'
+  | 'payoutDraft'
+  | 'payoutNotCurrent'
+  | 'payoutNeedsMethod'
+  | 'payoutNoteLong'
   | 'network'
   | 'notConfigured'
   | 'unknown';
@@ -79,6 +84,11 @@ export const DISTRIBUTION_FAILURE_KEY: Record<DistributionFailure, StringKey> = 
   corrNeedsReason: 'corrErrNeedsReason',
   corrReasonLong: 'corrErrReasonLong',
   corrDoubleReason: 'corrErrDoubleReason',
+  payoutAlready: 'poErrAlready',
+  payoutDraft: 'poErrDraft',
+  payoutNotCurrent: 'poErrNotCurrent',
+  payoutNeedsMethod: 'poErrNeedsMethod',
+  payoutNoteLong: 'poErrNoteLong',
   network: 'authNetwork',
   notConfigured: 'authNotConfigured',
   unknown: 'authUnknown',
@@ -158,6 +168,14 @@ export function classifyDistributionError(error: unknown): DistributionFailure {
   if (message.includes('no active rule')) return 'noRule';
   if (message.includes('no unused tip reports')) return 'noReports';
   if (message.includes('rounding error')) return 'roundingError';
+  // Before the generic 23505 below: a second payout also raises 23505, and
+  // reading it as "those reports already fund a pool" would send a manager to
+  // the wrong screen entirely.
+  if (message.includes('already been marked paid')) return 'payoutAlready';
+  if (message.includes('has not been sent to anybody')) return 'payoutDraft';
+  if (message.includes('no longer current')) return 'payoutNotCurrent';
+  if (message.includes('say how this was paid')) return 'payoutNeedsMethod';
+  if (message.includes('that note is too long')) return 'payoutNoteLong';
   if (message.includes('tip_pool_sources_report_key') || code === '23505') return 'reportsUsed';
   if (message.includes('only a manager')) return 'notManager';
   if (code === '42501') return 'notManager';

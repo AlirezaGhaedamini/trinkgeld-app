@@ -17,6 +17,8 @@ import type {
   DistributionArea,
   DistributionDetail,
   DistributionEntry,
+  PayoutMethod,
+  Settlement,
   TipPool,
 } from '@/distribution/types';
 import { currentBusinessDate } from '@/shifts/time';
@@ -190,13 +192,21 @@ export function useDistributionHistory() {
     };
   }, []);
 
+  /* Settlement for every distribution in one read, so the history list can put
+     what was handed over beside what was calculated without a request per row. */
+  const [settlements, setSettlements] = useState<Record<string, Settlement>>({});
+
   const refresh = useCallback(async () => {
     if (!client || !membership) return;
     setStatus((s) => (s === 'ready' ? s : 'loading'));
     try {
-      const rows = await api.fetchDistributions(client, membership);
+      const [rows, settled] = await Promise.all([
+        api.fetchDistributions(client, membership),
+        api.fetchSettlements(client, membership.workplaceId),
+      ]);
       if (!alive.current) return;
       setDistributions(rows);
+      setSettlements(settled);
       setStatus('ready');
     } catch {
       if (alive.current) setStatus('error');
@@ -206,6 +216,7 @@ export function useDistributionHistory() {
   useEffect(() => {
     if (!enabled) {
       setDistributions([]);
+      setSettlements({});
       setStatus('idle');
       return;
     }
@@ -306,9 +317,40 @@ export function useDistributionHistory() {
     [client, refresh],
   );
 
+  /** Entitlement, what the lineage already settled, and the payout if any. */
+  const loadSettlement = useCallback(
+    async (id: string) => (client ? api.fetchSettlement(client, id) : null),
+    [client],
+  );
+
+  /** What the correction moved, per person. */
+  const loadMemberSettlement = useCallback(
+    async (id: string) => (client ? api.fetchMemberSettlement(client, id) : []),
+    [client],
+  );
+
+  /**
+   * Records the payout. No amount is sent: the server derives it, and this
+   * function has no way to influence it even if a caller wanted to.
+   */
+  const recordPayout = useCallback(
+    async (id: string, method: PayoutMethod | null, note?: string) => {
+      if (!client) return { ok: false as const, failure: 'notConfigured' as const };
+      try {
+        await api.recordPayout(client, id, method, note);
+        await refresh();
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, failure: classifyDistributionError(error) };
+      }
+    },
+    [client, refresh],
+  );
+
   return {
-    enabled, status, distributions, refresh, loadDetail, loadAckState,
+    enabled, status, distributions, settlements, refresh, loadDetail, loadAckState,
     loadQueries, resolveQuery, createReplacement, loadSupersededBy, send,
+    loadSettlement, loadMemberSettlement, recordPayout,
   };
 }
 

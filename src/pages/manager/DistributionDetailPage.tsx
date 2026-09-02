@@ -16,6 +16,7 @@ import { colorForAreaKey } from '@/data/areas';
 import { useDistributionHistory } from '@/distribution/useDistribution';
 import {
   ACK_VIEW, CORRECTION_NOTE_MAX, CORRECTION_REASONS, CORRECTION_REASON_LABEL,
+  PAYOUT_METHODS, PAYOUT_METHOD_LABEL, PAYOUT_NOTE_MAX,
   QUERY_NOTE_MAX, correctionDeltas, correctionSourceOf, lineageOf, tally, trimmedNote,
   type AckStateRow, type CorrectionDelta, type CorrectionReason, type QueryRow,
 } from '@/distribution/ack';
@@ -23,7 +24,9 @@ import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Sheet } from '@/components/ui/Sheet';
 import { Note } from '@/components/ui/Note';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
-import type { DistributionDetail } from '@/distribution/types';
+import type {
+  DistributionDetail, MemberSettlement, PayoutMethod, Settlement,
+} from '@/distribution/types';
 import { Badge } from '@/components/ui/Badge';
 import { ListRow } from '@/components/ui/ListRow';
 import { SectionLabel } from '@/components/ui/SectionLabel';
@@ -51,6 +54,11 @@ export function DistributionDetailPage() {
   const [corrReason, setCorrReason] = useState<CorrectionReason>('hours');
   const [corrNote, setCorrNote] = useState('');
   const [deltas, setDeltas] = useState<CorrectionDelta[] | null>(null);
+  const [settlement, setSettlement] = useState<Settlement | null>(null);
+  const [moved, setMoved] = useState<MemberSettlement[]>([]);
+  const [paying, setPaying] = useState(false);
+  const [payMethod, setPayMethod] = useState<PayoutMethod>('cash');
+  const [payNote, setPayNote] = useState('');
 
   /**
    * Read back, never recomputed.
@@ -74,11 +82,20 @@ export function DistributionDetailPage() {
     void history.loadSupersededBy(distributionId).then((id) => {
       if (!cancelled) setSupersededBy(id);
     });
+    // Settlement is read, never computed here: the amount owed is the server's
+    // answer, and this screen only shows it.
+    void history.loadSettlement(distributionId).then((row) => {
+      if (!cancelled) setSettlement(row);
+    });
+    void history.loadMemberSettlement(distributionId).then((rows) => {
+      if (!cancelled) setMoved(rows);
+    });
     return () => {
       cancelled = true;
     };
   }, [real, distributionId, reload, history.loadDetail, history.loadAckState,
-      history.loadQueries, history.loadSupersededBy]);
+      history.loadQueries, history.loadSupersededBy, history.loadSettlement,
+      history.loadMemberSettlement]);
 
   /* What the correction changed, per person. Both sides are immutable rows, so
      this is read twice and compared — never stored, never recalculated. */
@@ -160,6 +177,40 @@ export function DistributionDetailPage() {
         return;
       }
       void startCorrection({ reason: corrReason, note: correctionNote });
+    };
+
+    /* ── payout ──────────────────────────────────────────────────────────
+       Whether this version may be marked paid, and what settling it means.
+       Both come from the server: `due` is the difference the database derived,
+       and this screen has no arithmetic of its own to disagree with it. */
+    const paid = settlement?.payoutStatus === 'paid';
+    const payable = live && !paid;
+    const due = settlement?.dueCents ?? 0;
+    // A correction to a pool that was already settled in full moves nothing out
+    // of the till — it moves money between people. Naming a method for that
+    // would record a transfer that never happened, so it is not asked for.
+    const needsMethod = due !== 0;
+    // Only meaningful once something in the lineage has actually been settled.
+    // With nothing settled, every "difference" is simply that person's whole
+    // share, which is the distribution itself and not a correction.
+    const hasBasis = (settlement?.settledEntitlementCents ?? 0) !== 0;
+    const changedPeople = hasBasis ? moved.filter((m) => m.differenceCents !== 0) : [];
+
+    const submitPayout = async () => {
+      const note = trimmedNote(payNote);
+      const result = await history.recordPayout(
+        dist.id,
+        needsMethod ? payMethod : null,
+        note.length > 0 ? note : undefined,
+      );
+      if (!result.ok) {
+        show(t(DISTRIBUTION_FAILURE_KEY[result.failure ?? 'unknown']));
+        return;
+      }
+      setPaying(false);
+      setPayNote('');
+      show(t('poRecorded'));
+      setReload((n) => n + 1);
     };
 
     const answer = async (outcome: 'no_correction' | 'correction_required') => {
@@ -338,6 +389,111 @@ export function DistributionDetailPage() {
                     {d.deltaCents === 0
                       ? t('corrNoChange')
                       : `${d.deltaCents > 0 ? '+' : '−'}${money(Math.abs(d.deltaCents) / 100)}`}
+                  </span>
+                }
+              />
+            ))}
+          </section>
+        ) : null}
+
+        {/* ── payout ─────────────────────────────────────────────────────
+            Kept beside the acknowledgement tally and never merged into it: a
+            distribution everybody confirmed may be unpaid, and one nobody has
+            confirmed may already have been handed over in cash. */}
+        {!isDraft && settlement ? (
+          <Card padding="padded">
+            <div className={ui.stackTight}>
+              <SectionLabel>{t('poPayout')}</SectionLabel>
+              <Badge tone={paid ? 'quiet' : undefined}>
+                {paid ? t('poPaid') : t('poUnpaid')}
+              </Badge>
+
+              {paid ? (
+                <>
+                  <p className={ui.rowMeta}>
+                    {t(dist.supersedesId ? 'poCorrectionSettled' : 'poSettledAmount')
+                      .replace('{amount}', money((settlement.payoutAmountCents ?? 0) / 100))}
+                  </p>
+                  {settlement.paidAt ? (
+                    <p className={ui.rowMeta}>
+                      {t('poPaidOn').replace('{when}', day(new Date(settlement.paidAt)))}
+                    </p>
+                  ) : null}
+                  {settlement.payoutMethod ? (
+                    <p className={ui.rowMeta}>
+                      {t('poPaidHow').replace(
+                        '{how}',
+                        t(PAYOUT_METHOD_LABEL[settlement.payoutMethod]),
+                      )}
+                    </p>
+                  ) : null}
+                  {settlement.paidByName ? (
+                    <p className={ui.rowMeta}>
+                      {t('poPaidBy').replace('{who}', settlement.paidByName)}
+                    </p>
+                  ) : null}
+                  {settlement.payoutNote ? (
+                    <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                      {settlement.payoutNote}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <ListRow title={t('poEntitlement')} meta="" trailing={
+                    <span className="tabular">{money(settlement.entitlementCents / 100)}</span>
+                  } />
+                  {settlement.settledEntitlementCents !== 0 ? (
+                    <ListRow title={t('poAlreadySettled')} meta="" trailing={
+                      <span className="tabular">
+                        {money(settlement.settledEntitlementCents / 100)}
+                      </span>
+                    } />
+                  ) : null}
+                  <ListRow
+                    title={t(settlement.settledEntitlementCents !== 0 ? 'poDifference' : 'poAmountLabel')}
+                    meta=""
+                    trailing={
+                      <span className="tabular" style={{ fontWeight: 600 }}>
+                        {due === 0 ? t('poNothingDue') : money(due / 100)}
+                      </span>
+                    }
+                  />
+                  {due === 0 && settlement.settledEntitlementCents !== 0 ? (
+                    <Note>{t('poNothingDueNote')}</Note>
+                  ) : null}
+                  {payable ? (
+                    <Button variant="secondary" onClick={() => setPaying(true)}>
+                      {t('poMark')}
+                    </Button>
+                  ) : null}
+                  {required ? <Note>{t('poAckIndependent')}</Note> : null}
+                </>
+              )}
+            </div>
+          </Card>
+        ) : null}
+
+        {/* Who the correction actually moves money between — the number a
+            manager has to act on, since the workplace total cannot change. */}
+        {changedPeople.length > 0 ? (
+          <section className={ui.stackFlush}>
+            <SectionLabel>{t('poWhoChanged')}</SectionLabel>
+            {changedPeople.map((m) => (
+              <ListRow
+                key={m.memberId}
+                title={m.memberName}
+                meta={`${t('poAlreadySettled')} ${money(m.previouslySettledCents / 100)} · ${t('poEntitlement')} ${money(m.entitlementCents / 100)}`}
+                trailing={
+                  <span
+                    className="tabular"
+                    style={{
+                      color: m.differenceCents > 0
+                        ? 'var(--color-money)'
+                        : 'var(--color-warning)',
+                    }}
+                  >
+                    {`${m.differenceCents > 0 ? '+' : '−'}${money(Math.abs(m.differenceCents) / 100)}`}
                   </span>
                 }
               />
@@ -544,6 +700,59 @@ export function DistributionDetailPage() {
             </Button>
             <Button variant="ghost" onClick={() => setCorrecting(false)}>
               {t('corrMgrCancel')}
+            </Button>
+          </div>
+        </Sheet>
+
+        {/* Recording a payout. The amount is shown and never typed: the server
+            derived it, and this sheet sends a method and a note, nothing more. */}
+        <Sheet open={paying} title={t('poTitle')} onClose={() => setPaying(false)}>
+          <div className={ui.stackTight}>
+            <Note>{t('poIntro')}</Note>
+
+            <ListRow
+              title={t(needsMethod ? 'poAmountLabel' : 'poNothingDue')}
+              meta=""
+              trailing={
+                <span className="tabular" style={{ fontWeight: 600 }}>
+                  {needsMethod ? money(due / 100) : money(0)}
+                </span>
+              }
+            />
+            {!needsMethod ? <Note>{t('poNothingDueNote')}</Note> : null}
+
+            {needsMethod ? (
+              <>
+                <SectionLabel>{t('poMethodLabel')}</SectionLabel>
+                <ChipGroup<PayoutMethod>
+                  label={t('poMethodLabel')}
+                  options={PAYOUT_METHODS.map((m) => ({
+                    value: m,
+                    label: t(PAYOUT_METHOD_LABEL[m]),
+                  }))}
+                  value={payMethod}
+                  onChange={setPayMethod}
+                />
+              </>
+            ) : null}
+
+            <label className={ui.fieldLabel} htmlFor="payout-note">
+              {t('poNoteLabel')}
+            </label>
+            <textarea
+              id="payout-note"
+              className={ui.fieldInput}
+              rows={2}
+              maxLength={PAYOUT_NOTE_MAX}
+              placeholder={t('poNotePlaceholder')}
+              value={payNote}
+              onChange={(event) => setPayNote(event.target.value)}
+              style={{ resize: 'none', lineHeight: 1.5, paddingTop: 10, height: 'auto' }}
+            />
+
+            <Button onClick={() => void submitPayout()}>{t('poConfirm')}</Button>
+            <Button variant="ghost" onClick={() => setPaying(false)}>
+              {t('poCancel')}
             </Button>
           </div>
         </Sheet>

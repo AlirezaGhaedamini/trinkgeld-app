@@ -23,6 +23,7 @@
  * and a unique index makes counting the same report twice impossible.
  */
 
+import type { Tables } from '@/types/database';
 import type { TipCrewClient } from '@/lib/supabase';
 import type { Membership } from '@/workplace/types';
 import type { AckStateRow, CorrectionReason, MyQuery, QueryRow } from '@/distribution/ack';
@@ -31,10 +32,15 @@ import {
   toDistribution,
   toEntry,
   toMemberDistribution,
+  toMemberSettlement,
   toPool,
+  toSettlement,
   type Distribution,
   type DistributionDetail,
   type DistributionEntry,
+  type MemberSettlement,
+  type PayoutMethod,
+  type Settlement,
   type TipPool,
 } from '@/distribution/types';
 
@@ -611,6 +617,80 @@ export async function createReplacement(
   });
   if (error) throw error;
   return typeof data === 'string' ? data : '';
+}
+
+/**
+ * Record that a distribution was handed over.
+ *
+ * The client sends a distribution, a method and an optional note — never an
+ * amount. What is settled is derived on the server from this version's
+ * entitlement and whatever its lineage already settled, because the amount is
+ * the one number in this product a browser must not be able to choose.
+ */
+export async function recordPayout(
+  client: TipCrewClient,
+  distributionId: string,
+  method: PayoutMethod | null,
+  note?: string,
+): Promise<string> {
+  const { data, error } = await client.rpc('record_distribution_payout', {
+    p_distribution_id: distributionId,
+    p_method: method,
+    ...(note ? { p_note: note } : {}),
+  });
+  if (error) throw error;
+  return typeof data === 'string' ? data : '';
+}
+
+/** Entitlement, what the lineage already settled, and the payout if there is one. */
+export async function fetchSettlement(
+  client: TipCrewClient,
+  distributionId: string,
+): Promise<Settlement | null> {
+  const { data, error } = await client
+    .from('distribution_settlement')
+    // One literal, not two joined with `+`: TypeScript widens a concatenation to
+    // `string`, and supabase-js can only parse a select whose literal type it can
+    // see. A split select silently types every row as GenericStringError.
+    .select('distribution_id,entitlement_cents,settled_entitlement_cents,settlement_due_cents,payout_status,payout_id,payout_amount_cents,payout_method,payout_note,paid_at,paid_by_name')
+    .eq('distribution_id', distributionId)
+    .limit(1);
+  if (error || !data?.[0]) return null;
+  return toSettlement(data[0] as Tables<'distribution_settlement'>);
+}
+
+/** Every distribution's settlement in one read, for the history list. */
+export async function fetchSettlements(
+  client: TipCrewClient,
+  workplaceId: string,
+): Promise<Record<string, Settlement>> {
+  const { data, error } = await client
+    .from('distribution_settlement')
+    .select('distribution_id,entitlement_cents,settled_entitlement_cents,settlement_due_cents,payout_status,payout_id,payout_amount_cents,payout_method,payout_note,paid_at,paid_by_name')
+    .eq('workplace_id', workplaceId);
+  if (error) return {};
+  const out: Record<string, Settlement> = {};
+  for (const row of data ?? []) {
+    const mapped = toSettlement(row as Tables<'distribution_settlement'>);
+    out[mapped.distributionId] = mapped;
+  }
+  return out;
+}
+
+/** What each person's share did between the settled version and this one. */
+export async function fetchMemberSettlement(
+  client: TipCrewClient,
+  distributionId: string,
+): Promise<MemberSettlement[]> {
+  const { data, error } = await client
+    .from('distribution_member_settlement')
+    .select('member_id,member_name,entitlement_cents,previously_settled_cents,difference_cents')
+    .eq('distribution_id', distributionId)
+    .order('member_name');
+  if (error) throw error;
+  return (data ?? []).map((row) =>
+    toMemberSettlement(row as Tables<'distribution_member_settlement'>),
+  );
 }
 
 /** The correction that replaced this distribution, if one has been sent. */

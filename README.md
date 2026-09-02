@@ -108,6 +108,20 @@ and nothing else, so a note of tabs and newlines was accepted as a reason.
 Migration 25 gives the function and the table constraint one shared definition
 of "blank" that names every whitespace character explicitly.
 
+**Phase 3L — payout. Complete.** TipCrew records whether a distribution was
+actually handed over: who marked it paid, when, and how — cash, with the
+payslip, by transfer, or another way. It moves no money and talks to no bank.
+Confirming and paying stay separate, because a place may pay in cash on the
+night and ask for the tap afterwards.
+
+The part that matters is what happens when a paid distribution is corrected. A
+replacement reuses the original's pool and a distributed pool is frozen, so a
+lineage's **total never changes** — the workplace can never be asked to hand
+over a second full amount. What a correction moves is money **between people**,
+and that is what the screens show: who is up, who is down, and by how much. Each
+person sees their own corrected share beside what was already settled for them,
+and the difference, so nobody expects a whole second payout.
+
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
 reproduces its layout, colours, spacing, typography and interactions.
@@ -387,6 +401,7 @@ node scripts/acknowledgement-check.mjs # Phase 3H: confirmation, multi-area entr
 node scripts/query-check.mjs       # Phase 3I: questions, resolution, cancelled distributions
 node scripts/replacement-check.mjs # Phase 3J: corrections, lineage, one payout per pool
 node scripts/manager-correction-check.mjs # Phase 3K: the manager's own correction door
+node scripts/payout-check.mjs      # Phase 3L: payout, settlement lineage, exactly-once
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test

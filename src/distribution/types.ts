@@ -97,6 +97,80 @@ export interface Distribution {
   /** Why a manager corrected this themselves. Null on the employee-query path. */
   correctionReason: CorrectionReason | null;
   correctionNote: string | null;
+  /** Whether the workplace has recorded handing this over. Derived, never stored. */
+  payoutStatus: PayoutStatus;
+  payoutMethod: PayoutMethod | null;
+  paidAt: string | null;
+  /**
+   * The version this one is settled against — the nearest ancestor anybody was
+   * actually paid for, or null if the lineage was never settled. A member reads
+   * their own entries on it to work out their own correction difference.
+   */
+  settledBasisId: string | null;
+}
+
+/** How a workplace handed the money over. Null when nothing changed hands. */
+export type PayoutMethod = 'cash' | 'payroll' | 'bank_transfer' | 'other';
+export type PayoutStatus = 'unpaid' | 'paid';
+
+/**
+ * The manager's settlement picture for one distribution.
+ *
+ * `entitlementCents` is what this version says the team is owed;
+ * `settledEntitlementCents` is what the lineage already handed over; `dueCents`
+ * is the difference. For a first payout the difference is the whole amount; for
+ * a correction to an already-settled pool it is zero, because a replacement
+ * reuses the original's pool and a distributed pool's amounts are frozen.
+ */
+export interface Settlement {
+  distributionId: string;
+  entitlementCents: number;
+  settledEntitlementCents: number;
+  dueCents: number;
+  payoutStatus: PayoutStatus;
+  payoutId: string | null;
+  payoutAmountCents: number | null;
+  payoutMethod: PayoutMethod | null;
+  payoutNote: string | null;
+  paidAt: string | null;
+  paidByName: string | null;
+}
+
+/** What one person's share did between the settled version and this one. */
+export interface MemberSettlement {
+  memberId: string;
+  memberName: string;
+  entitlementCents: number;
+  previouslySettledCents: number;
+  differenceCents: number;
+}
+
+export function toSettlement(row: Tables<'distribution_settlement'>): Settlement {
+  return {
+    distributionId: row.distribution_id ?? '',
+    entitlementCents: row.entitlement_cents ?? 0,
+    settledEntitlementCents: row.settled_entitlement_cents ?? 0,
+    dueCents: row.settlement_due_cents ?? 0,
+    payoutStatus: (row.payout_status ?? 'unpaid') as PayoutStatus,
+    payoutId: row.payout_id,
+    payoutAmountCents: row.payout_amount_cents,
+    payoutMethod: row.payout_method as PayoutMethod | null,
+    payoutNote: row.payout_note,
+    paidAt: row.paid_at,
+    paidByName: row.paid_by_name,
+  };
+}
+
+export function toMemberSettlement(
+  row: Tables<'distribution_member_settlement'>,
+): MemberSettlement {
+  return {
+    memberId: row.member_id ?? '',
+    memberName: row.member_name ?? '',
+    entitlementCents: row.entitlement_cents ?? 0,
+    previouslySettledCents: row.previously_settled_cents ?? 0,
+    differenceCents: row.difference_cents ?? 0,
+  };
 }
 
 export function toPool(row: Tables<'tip_pools'>): TipPool {
@@ -178,6 +252,12 @@ export function toDistribution(row: Tables<'tip_distributions'>): Distribution {
     triggerQueryId: row.trigger_query_id,
     correctionReason: row.correction_reason,
     correctionNote: row.correction_note,
+    // The manager table carries no payout columns: settlement is its own record,
+    // and the manager screen reads it from distribution_settlement.
+    payoutStatus: 'unpaid',
+    payoutMethod: null,
+    paidAt: null,
+    settledBasisId: null,
   };
 }
 
@@ -227,6 +307,13 @@ export function toMemberDistribution(row: Tables<'member_distributions'>): Distr
     triggerQueryId: null,
     correctionReason: row.correction_reason,
     correctionNote: row.correction_note,
+    // Whether, how and when — never how much. The amounts on a payout are
+    // workplace totals, and a member's own difference comes from their own
+    // entries on this version and on settledBasisId.
+    payoutStatus: (row.payout_status ?? 'unpaid') as PayoutStatus,
+    payoutMethod: row.payout_method as PayoutMethod | null,
+    paidAt: row.paid_at,
+    settledBasisId: row.settled_basis_id,
   };
 }
 

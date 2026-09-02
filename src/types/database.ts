@@ -89,6 +89,48 @@ export type Database = {
           },
         ]
       }
+      distribution_payouts: {
+        Row: {
+          id: string
+          workplace_id: string
+          distribution_id: string
+          entitlement_cents: number
+          previous_entitlement_cents: number
+          amount_cents: number
+          method: Database["public"]["Enums"]["payout_method"] | null
+          note: string | null
+          paid_at: string
+          paid_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workplace_id: string
+          distribution_id: string
+          entitlement_cents: number
+          previous_entitlement_cents: number
+          amount_cents: number
+          method?: Database["public"]["Enums"]["payout_method"] | null
+          note?: string | null
+          paid_at?: string
+          paid_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workplace_id?: string
+          distribution_id?: string
+          entitlement_cents?: number
+          previous_entitlement_cents?: number
+          amount_cents?: number
+          method?: Database["public"]["Enums"]["payout_method"] | null
+          note?: string | null
+          paid_at?: string
+          paid_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       distribution_queries: {
         Row: {
           created_at: string
@@ -1532,6 +1574,38 @@ export type Database = {
           },
         ]
       }
+      distribution_settlement: {
+        Row: {
+          distribution_id: string | null
+          workplace_id: string | null
+          status: Database["public"]["Enums"]["distribution_status"] | null
+          supersedes_id: string | null
+          entitlement_cents: number | null
+          settled_entitlement_cents: number | null
+          settlement_due_cents: number | null
+          payout_status: Database["public"]["Enums"]["payout_status"] | null
+          payout_id: string | null
+          payout_amount_cents: number | null
+          payout_method: Database["public"]["Enums"]["payout_method"] | null
+          payout_note: string | null
+          paid_at: string | null
+          paid_by: string | null
+          paid_by_name: string | null
+        }
+        Relationships: []
+      }
+      distribution_member_settlement: {
+        Row: {
+          distribution_id: string | null
+          workplace_id: string | null
+          member_id: string | null
+          member_name: string | null
+          entitlement_cents: number | null
+          previously_settled_cents: number | null
+          difference_cents: number | null
+        }
+        Relationships: []
+      }
       member_distributions: {
         Row: {
           acknowledgement_required: boolean | null
@@ -1553,6 +1627,10 @@ export type Database = {
           status: Database["public"]["Enums"]["distribution_status"] | null
           superseded_by: string | null
           supersedes_id: string | null
+          payout_status: Database["public"]["Enums"]["payout_status"] | null
+          payout_method: Database["public"]["Enums"]["payout_method"] | null
+          paid_at: string | null
+          settled_basis_id: string | null
           workplace_id: string | null
         }
         Relationships: [
@@ -1636,6 +1714,14 @@ export type Database = {
           p_period_end: string
           p_period_start: string
           p_workplace_id: string
+        }
+        Returns: string
+      }
+      record_distribution_payout: {
+        Args: {
+          p_distribution_id: string
+          p_method?: Database["public"]["Enums"]["payout_method"] | null
+          p_note?: string | null
         }
         Returns: string
       }
@@ -1775,6 +1861,8 @@ export type Database = {
       pool_status: "open" | "locked" | "distributed" | "void"
       query_outcome: "no_correction" | "correction_required"
       query_status: "open" | "resolved"
+      payout_method: "cash" | "payroll" | "bank_transfer" | "other"
+      payout_status: "unpaid" | "paid"
       rule_adopted_by: "employer" | "staff_agreement" | "works_council"
       rule_method: "hours_points" | "hours" | "equal"
       rule_status: "draft" | "active" | "superseded"

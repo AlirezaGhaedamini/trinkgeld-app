@@ -813,6 +813,103 @@ server is going to refuse. JavaScript's own `.trim()` is close but not identical
 
 ---
 
+## 4j. Payout / paid status (migration 26)
+
+TipCrew records whether a finalised distribution was actually handed over.
+Nothing here moves money: a payout row is an operational fact a manager
+asserts, never proof that a transfer settled.
+
+### The audit finding that shaped this phase
+
+Before writing anything, one question decided the design: **can a lineage's
+total change?** It cannot, and that is structural rather than incidental:
+
+- a replacement reuses the original's pool (Phase 3J's double-count defence);
+- `app.guard_pool_amounts()` freezes a pool's amounts once it is `distributed`;
+- the engine refuses to write a distribution whose entries do not sum to the
+  pool exactly.
+
+Measured on a real lineage: `100000 → 100000` across a correction, while the
+split moved `61818/38182 → 67692/32308`. So the workplace-level difference
+after a correction is **always zero**, and the money that actually has to move
+is **per person** — `+58.74` to one, `−58.74` from another.
+
+Both arithmetics are therefore kept, and both are derived:
+
+- `distribution_settlement` answers *does the workplace still owe anything?* —
+  the whole amount for a first payout, zero for a correction to a settled pool;
+- `distribution_member_settlement` answers *who is up and who is down?* — the
+  number a manager has to act on.
+
+### A ledger, not columns
+
+`distribution_payouts` is one immutable row per settled distribution. A payout
+is an event, and this product has lineages, so the history has to be readable
+rather than merely current. Each row carries its own arithmetic:
+
+| column | meaning |
+| --- | --- |
+| `entitlement_cents` | what this version says the team is owed |
+| `previous_entitlement_cents` | what the lineage had already settled |
+| `amount_cents` | what actually changed hands (the difference) |
+
+and `payouts_amount_is_the_difference` holds them together, so a row cannot lie
+about itself. The consequence is a telescoping sum: across a lineage the payout
+amounts add up to the entitlement of the most recently settled version.
+€1,000 then +€50 is €1,050 settled, never €2,050.
+
+### Where the difference comes from
+
+`app.settled_basis(distribution)` walks back through `supersedes_id` and stops
+at the first ancestor that has a payout. Status is deliberately not filtered:
+that ancestor is normally `cancelled` precisely *because* it was replaced, and
+its payment still counts. `app.settled_entitlement()` reads that row's
+entitlement, or 0 when the lineage was never settled — which is the whole
+difference between "paid, then replaced" (settle the difference) and "never
+paid, then replaced" (settle the full amount).
+
+### Exactly once
+
+`distribution_payouts_one_per_distribution` is unique on `distribution_id`. The
+RPC also checks first and converts a concurrent unique violation into the same
+refusal, so a double click, a refresh, two tabs or two managers all get one
+answer and one row. The index is what survives the race; the check is only
+there to make the common case say something readable.
+
+### Immutable, with no escape
+
+`app.guard_payout_immutable()` raises on every UPDATE and every DELETE, with no
+trusted-context escape — the engine never edits a payout either, so an escape
+hatch would only mean "immutable unless you came from the right function". If a
+payout was recorded in error, the answer is a reversal *event* in a later
+phase, not an edit.
+
+### Who chooses the amount
+
+Nobody. `record_distribution_payout(distribution, method, note)` has no amount
+argument. The server derives it from the distribution's entitlement and its
+lineage. A method is required only when something actually changed hands: a
+correction worth nothing is settled at zero with `method` null, because naming
+one would record a transfer that never happened.
+
+### What an employee is told
+
+`member_distributions` gains `payout_status`, `payout_method`, `paid_at` and
+`settled_basis_id` — and no figure at all. The amounts on a payout are
+workplace totals, which employees may not read unless the workplace released
+the pool. A member works out their own correction difference from their own
+entries on this version and on `settled_basis_id`, both of which they could
+already read. `distribution_member_settlement` reads `tip_distributions` and so
+is manager-only by inheritance.
+
+### Acknowledgement is not payment
+
+Neither implies the other, and the screens keep them apart. A place can pay in
+cash on the night and ask for the tap afterwards; a distribution everybody
+confirmed may be unpaid for a fortnight.
+
+---
+
 ## 5. Security model
 
 ### Roles

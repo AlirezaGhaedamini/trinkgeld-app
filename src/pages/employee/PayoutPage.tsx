@@ -10,12 +10,14 @@ import { useToast } from '@/hooks/useToast';
 import { distributionById, latestDistribution, shareOf } from '@/state/selectors';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
 import {
-  ACK_VIEW, CORRECTION_REASON_LABEL, QUERY_NOTE_MAX, ackViewFor, acknowledgedAtFor,
+  ACK_VIEW, CORRECTION_REASON_LABEL, PAYOUT_METHOD_LABEL, QUERY_NOTE_MAX,
+  ackViewFor, acknowledgedAtFor, ownDifference,
 } from '@/distribution/ack';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Sheet } from '@/components/ui/Sheet';
+import { ListRow } from '@/components/ui/ListRow';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { useMyShare } from '@/distribution/useDistribution';
 import ui from '@/components/ui/ui.module.css';
@@ -81,6 +83,20 @@ export function PayoutPage() {
       (a) => a.areaId === own?.areaId,
     );
     const totalCents = ownEntries.reduce((sum, e) => sum + e.amountCents, 0);
+
+    /* Their own correction difference, from the two records they may already
+       read: their share here, and their share on the version the workplace
+       actually settled. No workplace figure is involved — the amounts on a
+       payout are totals, and an employee never sees one. */
+    const settledCents =
+      realDistribution.settledBasisId === null
+        ? null
+        : mine.entries
+            .filter(
+              (e) => e.distributionId === realDistribution.settledBasisId && e.isOwn !== false,
+            )
+            .reduce((sum, e) => sum + e.amountCents, 0);
+    const ownDiff = ownDifference(totalCents, settledCents);
 
     // The requirement is the one frozen into this distribution, not today's
     // rule — an old payout keeps asking, or not asking, exactly what it did.
@@ -304,6 +320,74 @@ export function PayoutPage() {
             </div>
           </Card>
         ) : null}
+
+        {/* Whether the workplace recorded handing this over — separate from
+            whether they confirmed it, because a place can pay in cash on the
+            night and ask for the tap afterwards. */}
+        <Card padding="padded">
+          <div className={ui.stackTight}>
+            <Badge tone={realDistribution.payoutStatus === 'paid' ? 'quiet' : undefined}>
+              {realDistribution.payoutStatus === 'paid' ? t('poPaid') : t('poUnpaid')}
+            </Badge>
+            <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
+              {realDistribution.payoutStatus === 'paid' ? t('poEmpPaid') : t('poEmpUnpaid')}
+            </p>
+            {realDistribution.paidAt ? (
+              <p className={ui.rowMeta}>
+                {t('poPaidOn').replace('{when}', day(new Date(realDistribution.paidAt)))}
+              </p>
+            ) : null}
+            {realDistribution.payoutMethod ? (
+              <p className={ui.rowMeta}>
+                {t('poPaidHow').replace(
+                  '{how}',
+                  t(PAYOUT_METHOD_LABEL[realDistribution.payoutMethod]),
+                )}
+              </p>
+            ) : null}
+
+            {/* A correction after a payment: their new share, what was already
+                settled for them, and the difference — never implying that the
+                whole corrected share is about to arrive a second time. */}
+            {ownDiff ? (
+              <>
+                <ListRow
+                  title={t('poEmpYourShare')}
+                  meta=""
+                  trailing={<span className="tabular">{money(ownDiff.current / 100)}</span>}
+                />
+                <ListRow
+                  title={t('poEmpPrevious')}
+                  meta=""
+                  trailing={<span className="tabular">{money(ownDiff.previous / 100)}</span>}
+                />
+                <ListRow
+                  title={t('poEmpDifference')}
+                  meta=""
+                  trailing={
+                    <span
+                      className="tabular"
+                      style={{
+                        fontWeight: 600,
+                        color:
+                          ownDiff.difference === 0
+                            ? 'var(--color-text-subtle)'
+                            : ownDiff.difference > 0
+                              ? 'var(--color-money)'
+                              : 'var(--color-warning)',
+                      }}
+                    >
+                      {ownDiff.difference === 0
+                        ? t('corrNoChange')
+                        : `${ownDiff.difference > 0 ? '+' : '−'}${money(Math.abs(ownDiff.difference) / 100)}`}
+                    </span>
+                  }
+                />
+                <Note>{t('poEmpNoTransfer')}</Note>
+              </>
+            ) : null}
+          </div>
+        </Card>
 
         {/* The exchange, once there has been one: their words, then the
             manager's. Kept on the payout it is about, so it stays with the
