@@ -910,6 +910,95 @@ confirmed may be unpaid for a fortnight.
 
 ---
 
+## 4k. Payout reversal events (migration 27)
+
+A payout recorded by mistake is never edited and never deleted. A second
+immutable event says it should no longer count, and both rows stay for ever:
+
+```
+Distribution  €1,000
+Payout        +€1,000
+Reversal      -€1,000
+Payout        +€1,000
+```
+
+not "unpaid", which would claim nothing ever happened.
+
+### What a reversal is not
+
+It recovers no cash, reverses no transfer, corrects no payslip and asks nobody
+for money back. It says exactly one thing: TipCrew's record of that payment
+should no longer count as settled. Every screen says so before it says anything
+else, because a manager who believes otherwise would stop chasing a real debt.
+
+### Effective, not merely existing
+
+The whole phase turns on one word. `app.payout_is_effective()` is true while no
+reversal points at a payout; `app.effective_payout(distribution)` is the one
+that still counts. Everything else reads through those:
+
+- `app.settled_basis()` walks ancestors looking for an **effective** payout, so
+  a reversed payment stops being a settlement basis the moment it is reversed;
+- `record_distribution_payout()` blocks on an **effective** payout, so a
+  reversed one does not bar a legitimate new payment for ever;
+- `payout_status` is read off the effective event, never off "has a reversal
+  somewhere" — paid → reversed → paid again ends at **paid**.
+
+### The uniqueness rule, replaced rather than removed
+
+Migration 26 held `unique (distribution_id)` on `distribution_payouts`. After a
+reversal that is wrong, so it is dropped — and replaced by the invariant it
+stood for: **at most one payout per distribution that has not been reversed**.
+
+That spans two tables, so no index can express it. `app.guard_one_effective_payout()`
+takes a row lock on the distribution *first* and then tests, which is what makes
+check-then-insert atomic. The trigger runs for every writer, including a direct
+INSERT that never touches the RPC, so the guarantee does not rest on callers
+behaving. Measured with four real concurrent connections: two payouts → one row;
+two reversals → one row; a reversal racing a repayment → one effective payout,
+whichever landed first.
+
+### The safety rule
+
+If a later version was settled against this payment — A paid €1,000, B corrected
+and settled its difference — then reversing A would leave B's stored arithmetic
+describing a settlement that never happened. `app.has_settled_descendant()`
+walks forward through every descendant, and `reverse_distribution_payout()`
+refuses when one has an effective payout. Blocking is the honest answer;
+retroactive accounting is not. Unwound in the right order — the later settlement
+first — the earlier reversal is then allowed.
+
+`distribution_settlement.can_reverse` exposes that answer, so the screen never
+offers a button the server is going to refuse.
+
+### Exactly once, and no undo of an undo
+
+`distribution_payout_reversals_one_per_payout` is unique on `payout_id` — a
+single-table fact, so this one *is* index-backed. A second attempt is **refused**
+with "this payout has already been reversed", deterministically, matching how a
+duplicate payout behaves. There is no un-reversal in this phase: the way back is
+to record a new payout, which is a new event with its own row.
+
+`app.guard_reversal_immutable()` raises on every UPDATE and DELETE with no
+trusted-context escape, exactly as on the payout itself.
+
+### Why a new enum rather than a new value
+
+`alter type ... add value` cannot be followed by a use of that value in the same
+transaction, and `supabase db push` applies a migration in one. Measured, not
+assumed: adding `reversed` to `payout_status` and selecting it two lines later
+fails with *unsafe use of new value*. So `payout_state` is created whole and the
+views move to it; `payout_status` is left exactly as migration 26 wrote it.
+
+### One correction to migration 26 while passing
+
+`settlement_due_cents` computed only "entitlement minus what the ancestors
+settled" — the amount a payout *would* record. Correct while unpaid, and easy to
+misread as an outstanding debt on a paid row. It is now zero once this version
+has a payout that still counts.
+
+---
+
 ## 5. Security model
 
 ### Roles

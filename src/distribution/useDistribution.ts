@@ -18,6 +18,7 @@ import type {
   DistributionDetail,
   DistributionEntry,
   PayoutMethod,
+  ReversalReason,
   Settlement,
   TipPool,
 } from '@/distribution/types';
@@ -347,10 +348,35 @@ export function useDistributionHistory() {
     [client, refresh],
   );
 
+  /** Every payment and reversal on one distribution, oldest first. */
+  const loadPayoutEvents = useCallback(
+    async (id: string) => (client ? api.fetchPayoutEvents(client, id) : []),
+    [client],
+  );
+
+  /**
+   * Takes a payout record back. Sends a payout, a category and a sentence —
+   * never a workplace, a distribution, an amount or an actor.
+   */
+  const reversePayout = useCallback(
+    async (payoutId: string, reason: ReversalReason, note: string) => {
+      if (!client) return { ok: false as const, failure: 'notConfigured' as const };
+      try {
+        await api.reversePayout(client, payoutId, reason, note);
+        await refresh();
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, failure: classifyDistributionError(error) };
+      }
+    },
+    [client, refresh],
+  );
+
   return {
     enabled, status, distributions, settlements, refresh, loadDetail, loadAckState,
     loadQueries, resolveQuery, createReplacement, loadSupersededBy, send,
     loadSettlement, loadMemberSettlement, recordPayout,
+    loadPayoutEvents, reversePayout,
   };
 }
 

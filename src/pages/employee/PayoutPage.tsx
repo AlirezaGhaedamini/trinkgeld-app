@@ -10,8 +10,8 @@ import { useToast } from '@/hooks/useToast';
 import { distributionById, latestDistribution, shareOf } from '@/state/selectors';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
 import {
-  ACK_VIEW, CORRECTION_REASON_LABEL, PAYOUT_METHOD_LABEL, QUERY_NOTE_MAX,
-  ackViewFor, acknowledgedAtFor, ownDifference,
+  ACK_VIEW, CORRECTION_REASON_LABEL, PAYOUT_METHOD_LABEL, PAYOUT_STATE_LABEL,
+  QUERY_NOTE_MAX, ackViewFor, acknowledgedAtFor, ownDifference,
 } from '@/distribution/ack';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -327,11 +327,25 @@ export function PayoutPage() {
         <Card padding="padded">
           <div className={ui.stackTight}>
             <Badge tone={realDistribution.payoutStatus === 'paid' ? 'quiet' : undefined}>
-              {realDistribution.payoutStatus === 'paid' ? t('poPaid') : t('poUnpaid')}
+              {t(PAYOUT_STATE_LABEL[realDistribution.payoutStatus])}
             </Badge>
             <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
-              {realDistribution.payoutStatus === 'paid' ? t('poEmpPaid') : t('poEmpUnpaid')}
+              {realDistribution.payoutStatus === 'paid'
+                ? t('poEmpPaid')
+                : realDistribution.payoutStatus === 'reversed'
+                  ? t('revEmpReversed')
+                  : t('poEmpUnpaid')}
             </p>
+            {/* A record taken back is not money taken back. Said plainly, because
+                somebody who reads "reversed" as "they took it off me" would go
+                looking for a problem that does not exist — or stop chasing one
+                that does. */}
+            {realDistribution.payoutStatus === 'reversed' ? (
+              <>
+                <Note>{t('revEmpMeaning')}</Note>
+                <p className={ui.rowMeta}>{t('revEmpNowUnpaid')}</p>
+              </>
+            ) : null}
             {realDistribution.paidAt ? (
               <p className={ui.rowMeta}>
                 {t('poPaidOn').replace('{when}', day(new Date(realDistribution.paidAt)))}

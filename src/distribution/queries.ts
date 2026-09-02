@@ -33,13 +33,16 @@ import {
   toEntry,
   toMemberDistribution,
   toMemberSettlement,
+  toPayoutEvent,
   toPool,
   toSettlement,
   type Distribution,
   type DistributionDetail,
   type DistributionEntry,
   type MemberSettlement,
+  type PayoutEvent,
   type PayoutMethod,
+  type ReversalReason,
   type Settlement,
   type TipPool,
 } from '@/distribution/types';
@@ -657,6 +660,43 @@ export async function fetchSettlement(
     .limit(1);
   if (error || !data?.[0]) return null;
   return toSettlement(data[0] as Tables<'distribution_settlement'>);
+}
+
+/**
+ * Record that a payout should no longer count.
+ *
+ * The client sends a payout, a category and a sentence. It sends no workplace,
+ * no distribution, no amount, no actor and no timestamp — every one of those is
+ * derived from the payout row and the session, because a reversal is a claim
+ * about a specific past payment and the browser must not get to choose which.
+ */
+export async function reversePayout(
+  client: TipCrewClient,
+  payoutId: string,
+  reason: ReversalReason,
+  note: string,
+): Promise<string> {
+  const { data, error } = await client.rpc('reverse_distribution_payout', {
+    p_payout_id: payoutId,
+    p_reason: reason,
+    p_note: note,
+  });
+  if (error) throw error;
+  return typeof data === 'string' ? data : '';
+}
+
+/** Every payment and reversal on one distribution, oldest first. */
+export async function fetchPayoutEvents(
+  client: TipCrewClient,
+  distributionId: string,
+): Promise<PayoutEvent[]> {
+  const { data, error } = await client
+    .from('distribution_payout_events')
+    .select('distribution_id,payout_id,reversal_id,kind,event_at,amount_cents,method,reason,note,actor_name,still_counts')
+    .eq('distribution_id', distributionId)
+    .order('event_at');
+  if (error) throw error;
+  return (data ?? []).map((row) => toPayoutEvent(row as Tables<'distribution_payout_events'>));
 }
 
 /** Every distribution's settlement in one read, for the history list. */

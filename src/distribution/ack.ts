@@ -14,7 +14,7 @@
  */
 
 import type { StringKey } from '@/i18n/strings';
-import type { PayoutMethod } from '@/distribution/types';
+import type { PayoutMethod, PayoutStatus, ReversalReason } from '@/distribution/types';
 import type { AckStatus, DistributionEntry } from '@/distribution/types';
 
 /**
@@ -403,3 +403,39 @@ export function ownDifference(
     difference: currentCents - settledCents,
   };
 }
+
+/* ── reversal ────────────────────────────────────────────────────────────── */
+
+/**
+ * Why a payout record is being taken back.
+ *
+ * Every one of these is a statement about TipCrew's RECORD, not about money:
+ * "payment not completed" means the transfer never went out, not that it was
+ * clawed back.
+ */
+export const REVERSAL_REASONS: ReversalReason[] = [
+  'recorded_by_mistake',
+  'payment_not_completed',
+  'wrong_method',
+  'wrong_distribution',
+  'duplicate_record',
+  'other',
+];
+
+export const REVERSAL_REASON_LABEL: Record<ReversalReason, StringKey> = {
+  recorded_by_mistake: 'revReasonMistake',
+  payment_not_completed: 'revReasonNotCompleted',
+  wrong_method: 'revReasonMethod',
+  wrong_distribution: 'revReasonDistribution',
+  duplicate_record: 'revReasonDuplicate',
+  other: 'revReasonOther',
+};
+
+export const REVERSAL_NOTE_MAX = 500;
+
+/** What a payout state should say on screen, for either side. */
+export const PAYOUT_STATE_LABEL: Record<PayoutStatus, StringKey> = {
+  unpaid: 'poUnpaid',
+  paid: 'poPaid',
+  reversed: 'revState',
+};

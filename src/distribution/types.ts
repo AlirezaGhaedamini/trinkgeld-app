@@ -111,7 +111,21 @@ export interface Distribution {
 
 /** How a workplace handed the money over. Null when nothing changed hands. */
 export type PayoutMethod = 'cash' | 'payroll' | 'bank_transfer' | 'other';
-export type PayoutStatus = 'unpaid' | 'paid';
+
+/**
+ * The CURRENT state, read off the payout that still counts — never off the
+ * presence of a reversal somewhere in the history. Paid, reversed and paid
+ * again ends at `paid`.
+ */
+export type PayoutStatus = 'unpaid' | 'paid' | 'reversed';
+
+export type ReversalReason =
+  | 'recorded_by_mistake'
+  | 'wrong_method'
+  | 'wrong_distribution'
+  | 'payment_not_completed'
+  | 'duplicate_record'
+  | 'other';
 
 /**
  * The manager's settlement picture for one distribution.
@@ -134,6 +148,31 @@ export interface Settlement {
   payoutNote: string | null;
   paidAt: string | null;
   paidByName: string | null;
+  /** How many payments on this distribution have been reversed. History, not state. */
+  reversalCount: number;
+  /**
+   * Whether the payment standing now may be reversed. False when there is none,
+   * and false when a later corrected version has already been settled against
+   * it — reversing then would leave that settlement describing money nobody
+   * handed over.
+   */
+  canReverse: boolean;
+}
+
+/** One line of a distribution's payment history: a payout, or a reversal of one. */
+export interface PayoutEvent {
+  distributionId: string;
+  payoutId: string;
+  reversalId: string | null;
+  kind: 'payout' | 'reversal';
+  eventAt: string;
+  /** Negative on a reversal, so a column of these sums to what still counts. */
+  amountCents: number;
+  method: PayoutMethod | null;
+  reason: ReversalReason | null;
+  note: string | null;
+  actorName: string | null;
+  stillCounts: boolean;
 }
 
 /** What one person's share did between the settled version and this one. */
@@ -158,6 +197,24 @@ export function toSettlement(row: Tables<'distribution_settlement'>): Settlement
     payoutNote: row.payout_note,
     paidAt: row.paid_at,
     paidByName: row.paid_by_name,
+    reversalCount: row.reversal_count ?? 0,
+    canReverse: row.can_reverse ?? false,
+  };
+}
+
+export function toPayoutEvent(row: Tables<'distribution_payout_events'>): PayoutEvent {
+  return {
+    distributionId: row.distribution_id ?? '',
+    payoutId: row.payout_id ?? '',
+    reversalId: row.reversal_id,
+    kind: (row.kind ?? 'payout') as 'payout' | 'reversal',
+    eventAt: row.event_at ?? '',
+    amountCents: row.amount_cents ?? 0,
+    method: row.method as PayoutMethod | null,
+    reason: row.reason as ReversalReason | null,
+    note: row.note,
+    actorName: row.actor_name,
+    stillCounts: row.still_counts ?? true,
   };
 }
 

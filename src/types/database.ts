@@ -89,6 +89,42 @@ export type Database = {
           },
         ]
       }
+      distribution_payout_reversals: {
+        Row: {
+          id: string
+          workplace_id: string
+          payout_id: string
+          distribution_id: string
+          reason: Database["public"]["Enums"]["payout_reversal_reason"]
+          note: string
+          reversed_at: string
+          reversed_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workplace_id: string
+          payout_id: string
+          distribution_id: string
+          reason: Database["public"]["Enums"]["payout_reversal_reason"]
+          note: string
+          reversed_at?: string
+          reversed_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workplace_id?: string
+          payout_id?: string
+          distribution_id?: string
+          reason?: Database["public"]["Enums"]["payout_reversal_reason"]
+          note?: string
+          reversed_at?: string
+          reversed_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       distribution_payouts: {
         Row: {
           id: string
@@ -1574,6 +1610,23 @@ export type Database = {
           },
         ]
       }
+      distribution_payout_events: {
+        Row: {
+          distribution_id: string | null
+          workplace_id: string | null
+          payout_id: string | null
+          reversal_id: string | null
+          kind: string | null
+          event_at: string | null
+          amount_cents: number | null
+          method: Database["public"]["Enums"]["payout_method"] | null
+          reason: Database["public"]["Enums"]["payout_reversal_reason"] | null
+          note: string | null
+          actor_name: string | null
+          still_counts: boolean | null
+        }
+        Relationships: []
+      }
       distribution_settlement: {
         Row: {
           distribution_id: string | null
@@ -1583,7 +1636,7 @@ export type Database = {
           entitlement_cents: number | null
           settled_entitlement_cents: number | null
           settlement_due_cents: number | null
-          payout_status: Database["public"]["Enums"]["payout_status"] | null
+          payout_status: Database["public"]["Enums"]["payout_state"] | null
           payout_id: string | null
           payout_amount_cents: number | null
           payout_method: Database["public"]["Enums"]["payout_method"] | null
@@ -1591,6 +1644,8 @@ export type Database = {
           paid_at: string | null
           paid_by: string | null
           paid_by_name: string | null
+          reversal_count: number | null
+          can_reverse: boolean | null
         }
         Relationships: []
       }
@@ -1627,7 +1682,7 @@ export type Database = {
           status: Database["public"]["Enums"]["distribution_status"] | null
           superseded_by: string | null
           supersedes_id: string | null
-          payout_status: Database["public"]["Enums"]["payout_status"] | null
+          payout_status: Database["public"]["Enums"]["payout_state"] | null
           payout_method: Database["public"]["Enums"]["payout_method"] | null
           paid_at: string | null
           settled_basis_id: string | null
@@ -1714,6 +1769,14 @@ export type Database = {
           p_period_end: string
           p_period_start: string
           p_workplace_id: string
+        }
+        Returns: string
+      }
+      reverse_distribution_payout: {
+        Args: {
+          p_payout_id: string
+          p_reason?: Database["public"]["Enums"]["payout_reversal_reason"] | null
+          p_note?: string | null
         }
         Returns: string
       }
@@ -1863,6 +1926,14 @@ export type Database = {
       query_status: "open" | "resolved"
       payout_method: "cash" | "payroll" | "bank_transfer" | "other"
       payout_status: "unpaid" | "paid"
+      payout_state: "unpaid" | "paid" | "reversed"
+      payout_reversal_reason:
+        | "recorded_by_mistake"
+        | "wrong_method"
+        | "wrong_distribution"
+        | "payment_not_completed"
+        | "duplicate_record"
+        | "other"
       rule_adopted_by: "employer" | "staff_agreement" | "works_council"
       rule_method: "hours_points" | "hours" | "equal"
       rule_status: "draft" | "active" | "superseded"

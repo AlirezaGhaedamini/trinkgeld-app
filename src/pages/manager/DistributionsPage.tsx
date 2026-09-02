@@ -49,6 +49,7 @@ export function DistributionsPage() {
     const settlementLine = (id: string) => {
       const s = history.settlements[id];
       if (!s) return null;
+      if (s.payoutStatus === 'reversed') return t('revState');
       if (s.payoutStatus !== 'paid') return t('poHistoryUnpaid');
       const amount = money((s.payoutAmountCents ?? 0) / 100);
       const how = s.payoutMethod ? ` ${t(PAYOUT_METHOD_LABEL[s.payoutMethod])}` : '';

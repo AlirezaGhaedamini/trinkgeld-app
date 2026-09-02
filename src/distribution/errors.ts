@@ -46,6 +46,11 @@ export type DistributionFailure =
   | 'payoutNotCurrent'
   | 'payoutNeedsMethod'
   | 'payoutNoteLong'
+  | 'revAlready'
+  | 'revNeedsReason'
+  | 'revNeedsNote'
+  | 'revNoteLong'
+  | 'revDownstream'
   | 'network'
   | 'notConfigured'
   | 'unknown';
@@ -89,6 +94,11 @@ export const DISTRIBUTION_FAILURE_KEY: Record<DistributionFailure, StringKey> = 
   payoutNotCurrent: 'poErrNotCurrent',
   payoutNeedsMethod: 'poErrNeedsMethod',
   payoutNoteLong: 'poErrNoteLong',
+  revAlready: 'revErrAlready',
+  revNeedsReason: 'revErrNeedsReason',
+  revNeedsNote: 'revErrNeedsNote',
+  revNoteLong: 'revErrNoteLong',
+  revDownstream: 'revErrDownstream',
   network: 'authNetwork',
   notConfigured: 'authNotConfigured',
   unknown: 'authUnknown',
@@ -171,6 +181,15 @@ export function classifyDistributionError(error: unknown): DistributionFailure {
   // Before the generic 23505 below: a second payout also raises 23505, and
   // reading it as "those reports already fund a pool" would send a manager to
   // the wrong screen entirely.
+  // Before the generic rules below, and before payoutAlready: a reversal also
+  // answers 23505, and reading "already reversed" as "already paid" would send a
+  // manager looking for a payment that is exactly what they are trying to undo.
+  if (message.includes('has already been reversed')) return 'revAlready';
+  if (message.includes('say why this payout is being reversed')) return 'revNeedsReason';
+  if (message.includes('a reversal needs a sentence')) return 'revNeedsNote';
+  if (message.includes('that reason is too long')) return 'revNoteLong';
+  if (message.includes('has already been settled against this payment')) return 'revDownstream';
+  if (message.includes('already has a payout that has not been reversed')) return 'payoutAlready';
   if (message.includes('already been marked paid')) return 'payoutAlready';
   if (message.includes('has not been sent to anybody')) return 'payoutDraft';
   if (message.includes('no longer current')) return 'payoutNotCurrent';

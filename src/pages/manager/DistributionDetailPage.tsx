@@ -16,8 +16,9 @@ import { colorForAreaKey } from '@/data/areas';
 import { useDistributionHistory } from '@/distribution/useDistribution';
 import {
   ACK_VIEW, CORRECTION_NOTE_MAX, CORRECTION_REASONS, CORRECTION_REASON_LABEL,
-  PAYOUT_METHODS, PAYOUT_METHOD_LABEL, PAYOUT_NOTE_MAX,
-  QUERY_NOTE_MAX, correctionDeltas, correctionSourceOf, lineageOf, tally, trimmedNote,
+  PAYOUT_METHODS, PAYOUT_METHOD_LABEL, PAYOUT_NOTE_MAX, PAYOUT_STATE_LABEL,
+  QUERY_NOTE_MAX, REVERSAL_NOTE_MAX, REVERSAL_REASONS, REVERSAL_REASON_LABEL,
+  correctionDeltas, correctionSourceOf, lineageOf, tally, trimmedNote,
   type AckStateRow, type CorrectionDelta, type CorrectionReason, type QueryRow,
 } from '@/distribution/ack';
 import { ChipGroup } from '@/components/ui/ChipGroup';
@@ -25,7 +26,7 @@ import { Sheet } from '@/components/ui/Sheet';
 import { Note } from '@/components/ui/Note';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
 import type {
-  DistributionDetail, MemberSettlement, PayoutMethod, Settlement,
+  DistributionDetail, MemberSettlement, PayoutEvent, PayoutMethod, ReversalReason, Settlement,
 } from '@/distribution/types';
 import { Badge } from '@/components/ui/Badge';
 import { ListRow } from '@/components/ui/ListRow';
@@ -59,6 +60,10 @@ export function DistributionDetailPage() {
   const [paying, setPaying] = useState(false);
   const [payMethod, setPayMethod] = useState<PayoutMethod>('cash');
   const [payNote, setPayNote] = useState('');
+  const [events, setEvents] = useState<PayoutEvent[]>([]);
+  const [reversing, setReversing] = useState(false);
+  const [revReason, setRevReason] = useState<ReversalReason>('recorded_by_mistake');
+  const [revNote, setRevNote] = useState('');
 
   /**
    * Read back, never recomputed.
@@ -90,12 +95,15 @@ export function DistributionDetailPage() {
     void history.loadMemberSettlement(distributionId).then((rows) => {
       if (!cancelled) setMoved(rows);
     });
+    void history.loadPayoutEvents(distributionId).then((rows) => {
+      if (!cancelled) setEvents(rows);
+    });
     return () => {
       cancelled = true;
     };
   }, [real, distributionId, reload, history.loadDetail, history.loadAckState,
       history.loadQueries, history.loadSupersededBy, history.loadSettlement,
-      history.loadMemberSettlement]);
+      history.loadMemberSettlement, history.loadPayoutEvents]);
 
   /* What the correction changed, per person. Both sides are immutable rows, so
      this is read twice and compared — never stored, never recalculated. */
@@ -210,6 +218,27 @@ export function DistributionDetailPage() {
       setPaying(false);
       setPayNote('');
       show(t('poRecorded'));
+      setReload((n) => n + 1);
+    };
+
+    /* Taking a payout record back. Whether it is offered at all is the server's
+       answer (`canReverse`), not this screen's: a payment a later settlement
+       stands on cannot be reversed, and only the database knows that. */
+    const submitReversal = async () => {
+      const note = trimmedNote(revNote);
+      if (note.length === 0) {
+        show(t('revErrNeedsNote'));
+        return;
+      }
+      if (!settlement?.payoutId) return;
+      const result = await history.reversePayout(settlement.payoutId, revReason, note);
+      if (!result.ok) {
+        show(t(DISTRIBUTION_FAILURE_KEY[result.failure ?? 'unknown']));
+        return;
+      }
+      setReversing(false);
+      setRevNote('');
+      show(t('revRecorded'));
       setReload((n) => n + 1);
     };
 
@@ -405,8 +434,11 @@ export function DistributionDetailPage() {
             <div className={ui.stackTight}>
               <SectionLabel>{t('poPayout')}</SectionLabel>
               <Badge tone={paid ? 'quiet' : undefined}>
-                {paid ? t('poPaid') : t('poUnpaid')}
+                {t(PAYOUT_STATE_LABEL[settlement.payoutStatus])}
               </Badge>
+              {settlement.payoutStatus === 'reversed' ? (
+                <Note>{t('revNowUnpaid')}</Note>
+              ) : null}
 
               {paid ? (
                 <>
@@ -437,6 +469,16 @@ export function DistributionDetailPage() {
                       {settlement.payoutNote}
                     </p>
                   ) : null}
+                  {settlement.canReverse ? (
+                    <Button variant="ghost" onClick={() => setReversing(true)}>
+                      {t('revStart')}
+                    </Button>
+                  ) : (
+                    /* The server refused it, and the reason is worth saying: a
+                       later corrected version has already been settled against
+                       this payment. */
+                    <Note>{t('revBlocked')}</Note>
+                  )}
                 </>
               ) : (
                 <>
@@ -472,6 +514,38 @@ export function DistributionDetailPage() {
               )}
             </div>
           </Card>
+        ) : null}
+
+        {/* Every payment and every reversal, oldest first. A distribution that
+            was paid, corrected and paid again has a story, and a single "Paid"
+            would hide the middle of it. */}
+        {events.length > 1 ? (
+          <section className={ui.stackFlush}>
+            <SectionLabel>{t('revHistory')}</SectionLabel>
+            {events.map((e) => (
+              <ListRow
+                key={`${e.kind}-${e.reversalId ?? e.payoutId}`}
+                title={t(e.kind === 'reversal' ? 'revEventReversed' : 'revEventPaid')}
+                meta={[
+                  day(new Date(e.eventAt)),
+                  e.method ? t(PAYOUT_METHOD_LABEL[e.method]) : null,
+                  e.reason ? `${t('revReasonGiven')}: ${t(REVERSAL_REASON_LABEL[e.reason])}` : null,
+                  e.kind === 'payout' && !e.stillCounts ? t('revEventNoLongerCounts') : null,
+                ].filter(Boolean).join(' · ')}
+                trailing={
+                  <span
+                    className="tabular"
+                    style={{
+                      color: e.amountCents < 0 ? 'var(--color-warning)' : undefined,
+                      opacity: e.kind === 'payout' && !e.stillCounts ? 0.55 : 1,
+                    }}
+                  >
+                    {`${e.amountCents < 0 ? '−' : ''}${money(Math.abs(e.amountCents) / 100)}`}
+                  </span>
+                }
+              />
+            ))}
+          </section>
         ) : null}
 
         {/* Who the correction actually moves money between — the number a
@@ -753,6 +827,55 @@ export function DistributionDetailPage() {
             <Button onClick={() => void submitPayout()}>{t('poConfirm')}</Button>
             <Button variant="ghost" onClick={() => setPaying(false)}>
               {t('poCancel')}
+            </Button>
+          </div>
+        </Sheet>
+
+        {/* Taking a payout record back. The warning is the point of the sheet:
+            a manager who thinks this recovers money would stop chasing a real
+            debt, so it says what it does not do before it says anything else. */}
+        <Sheet open={reversing} title={t('revTitle')} onClose={() => setReversing(false)}>
+          <div className={ui.stackTight}>
+            <Card padding="padded" tone="warning">
+              <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                {t('revWarning')}
+              </p>
+            </Card>
+            <Note>{t('revIntro')}</Note>
+
+            <SectionLabel>{t('revReasonLabel')}</SectionLabel>
+            <ChipGroup<ReversalReason>
+              label={t('revReasonLabel')}
+              options={REVERSAL_REASONS.map((r) => ({
+                value: r,
+                label: t(REVERSAL_REASON_LABEL[r]),
+              }))}
+              value={revReason}
+              onChange={setRevReason}
+            />
+
+            <label className={ui.fieldLabel} htmlFor="reversal-note">
+              {t('revNoteLabel')}
+            </label>
+            <textarea
+              id="reversal-note"
+              className={ui.fieldInput}
+              rows={3}
+              maxLength={REVERSAL_NOTE_MAX}
+              placeholder={t('revNotePlaceholder')}
+              value={revNote}
+              onChange={(event) => setRevNote(event.target.value)}
+              style={{ resize: 'none', lineHeight: 1.5, paddingTop: 10, height: 'auto' }}
+            />
+
+            <Button
+              disabled={trimmedNote(revNote).length === 0}
+              onClick={() => void submitReversal()}
+            >
+              {t('revConfirm')}
+            </Button>
+            <Button variant="ghost" onClick={() => setReversing(false)}>
+              {t('revCancel')}
             </Button>
           </div>
         </Sheet>

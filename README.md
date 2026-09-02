@@ -122,6 +122,19 @@ and that is what the screens show: who is up, who is down, and by how much. Each
 person sees their own corrected share beside what was already settled for them,
 and the difference, so nobody expects a whole second payout.
 
+**Phase 3M — reversing a payout record. Complete.** A payment logged by mistake
+is never edited and never deleted. A second event says it should no longer
+count, and both stay on the record: paid, reversed, paid again — with the
+reversal shown as a negative so the column adds up to what actually still
+counts. The wording is careful everywhere, because a reversal changes TipCrew's
+record and not a bank transfer, a cash payment or a payslip.
+
+Two rules keep the money honest. A distribution may have at most one payment
+that still counts, held by a row lock and a trigger rather than by a disabled
+button. And a payment that a later corrected version was already settled
+against cannot be reversed at all — unwind the later one first — because
+otherwise that later settlement would describe money nobody handed over.
+
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
 reproduces its layout, colours, spacing, typography and interactions.
@@ -402,6 +415,7 @@ node scripts/query-check.mjs       # Phase 3I: questions, resolution, cancelled 
 node scripts/replacement-check.mjs # Phase 3J: corrections, lineage, one payout per pool
 node scripts/manager-correction-check.mjs # Phase 3K: the manager's own correction door
 node scripts/payout-check.mjs      # Phase 3L: payout, settlement lineage, exactly-once
+node scripts/payout-reversal-check.mjs # Phase 3M: reversal events, effective settlement
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test
