@@ -818,10 +818,16 @@ export type Database = {
           cancelled_at: string | null
           cancelled_by: string | null
           confirmed_at: string | null
+          correction_note: string | null
+          correction_reason:
+            | Database["public"]["Enums"]["correction_reason"]
+            | null
           created_at: string
           engine_version: string
           entries_total_cents: number
           id: string
+          initiated_at: string | null
+          initiated_by: string | null
           inputs_fingerprint: string | null
           inputs_snapshot: Json
           method: Database["public"]["Enums"]["rule_method"]
@@ -849,10 +855,16 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           confirmed_at?: string | null
+          correction_note?: string | null
+          correction_reason?:
+            | Database["public"]["Enums"]["correction_reason"]
+            | null
           created_at?: string
           engine_version: string
           entries_total_cents?: number
           id?: string
+          initiated_at?: string | null
+          initiated_by?: string | null
           inputs_fingerprint?: string | null
           inputs_snapshot: Json
           method: Database["public"]["Enums"]["rule_method"]
@@ -880,10 +892,16 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           confirmed_at?: string | null
+          correction_note?: string | null
+          correction_reason?:
+            | Database["public"]["Enums"]["correction_reason"]
+            | null
           created_at?: string
           engine_version?: string
           entries_total_cents?: number
           id?: string
+          initiated_at?: string | null
+          initiated_by?: string | null
           inputs_fingerprint?: string | null
           inputs_snapshot?: Json
           method?: Database["public"]["Enums"]["rule_method"]
@@ -915,6 +933,13 @@ export type Database = {
           {
             foreignKeyName: "tip_distributions_cancelled_by_fkey"
             columns: ["cancelled_by"]
+            isOneToOne: false
+            referencedRelation: "workplace_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tip_distributions_initiated_by_fkey"
+            columns: ["initiated_by"]
             isOneToOne: false
             referencedRelation: "workplace_members"
             referencedColumns: ["id"]
@@ -1511,6 +1536,10 @@ export type Database = {
         Row: {
           acknowledgement_required: boolean | null
           confirmed_at: string | null
+          correction_note: string | null
+          correction_reason:
+            | Database["public"]["Enums"]["correction_reason"]
+            | null
           id: string | null
           method: Database["public"]["Enums"]["rule_method"] | null
           min_overlap_minutes: number | null
@@ -1611,7 +1640,11 @@ export type Database = {
         Returns: string
       }
       create_replacement_distribution: {
-        Args: { p_original_id: string }
+        Args: {
+          p_note?: string
+          p_original_id: string
+          p_reason?: Database["public"]["Enums"]["correction_reason"]
+        }
         Returns: string
       }
       create_rule_draft: { Args: { p_workplace_id: string }; Returns: string }
@@ -1717,6 +1750,14 @@ export type Database = {
     }
     Enums: {
       area_source: "shift" | "member"
+      correction_reason:
+        | "hours"
+        | "area"
+        | "role"
+        | "multiplier"
+        | "tip_amount"
+        | "rule"
+        | "other"
       distribution_status: "draft" | "sent" | "confirmed" | "cancelled"
       entry_ack_status: "pending" | "acknowledged" | "queried"
       invitation_kind: "invite" | "join_request"
@@ -1870,6 +1911,15 @@ export const Constants = {
   public: {
     Enums: {
       area_source: ["shift", "member"],
+      correction_reason: [
+        "hours",
+        "area",
+        "role",
+        "multiplier",
+        "tip_amount",
+        "rule",
+        "other",
+      ],
       distribution_status: ["draft", "sent", "confirmed", "cancelled"],
       entry_ack_status: ["pending", "acknowledged", "queried"],
       invitation_kind: ["invite", "join_request"],

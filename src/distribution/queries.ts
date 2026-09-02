@@ -25,7 +25,7 @@
 
 import type { TipCrewClient } from '@/lib/supabase';
 import type { Membership } from '@/workplace/types';
-import type { AckStateRow, MyQuery, QueryRow } from '@/distribution/ack';
+import type { AckStateRow, CorrectionReason, MyQuery, QueryRow } from '@/distribution/ack';
 import {
   toArea,
   toDistribution,
@@ -599,9 +599,15 @@ function toMyQuery(row: {
 export async function createReplacement(
   client: TipCrewClient,
   originalId: string,
+  correction?: { reason: CorrectionReason; note: string },
 ): Promise<string> {
   const { data, error } = await client.rpc('create_replacement_distribution', {
     p_original_id: originalId,
+    // Sent only for a manager-initiated correction. Without them the database
+    // takes the employee-query path, exactly as it did in Phase 3J. The caller
+    // never sends a workplace, a member or a lineage id — the server derives
+    // every one of those.
+    ...(correction ? { p_reason: correction.reason, p_note: correction.note } : {}),
   });
   if (error) throw error;
   return typeof data === 'string' ? data : '';

@@ -15,9 +15,11 @@ import { distributionById, resultForDistribution } from '@/state/selectors';
 import { colorForAreaKey } from '@/data/areas';
 import { useDistributionHistory } from '@/distribution/useDistribution';
 import {
-  ACK_VIEW, QUERY_NOTE_MAX, correctionDeltas, lineageOf, tally,
-  type AckStateRow, type CorrectionDelta, type QueryRow,
+  ACK_VIEW, CORRECTION_NOTE_MAX, CORRECTION_REASONS, CORRECTION_REASON_LABEL,
+  QUERY_NOTE_MAX, correctionDeltas, correctionSourceOf, lineageOf, tally, trimmedNote,
+  type AckStateRow, type CorrectionDelta, type CorrectionReason, type QueryRow,
 } from '@/distribution/ack';
+import { ChipGroup } from '@/components/ui/ChipGroup';
 import { Sheet } from '@/components/ui/Sheet';
 import { Note } from '@/components/ui/Note';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
@@ -45,6 +47,9 @@ export function DistributionDetailPage() {
   const [response, setResponse] = useState('');
   const [reload, setReload] = useState(0);
   const [supersededBy, setSupersededBy] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState(false);
+  const [corrReason, setCorrReason] = useState<CorrectionReason>('hours');
+  const [corrNote, setCorrNote] = useState('');
   const [deltas, setDeltas] = useState<CorrectionDelta[] | null>(null);
 
   /**
@@ -120,20 +125,41 @@ export function DistributionDetailPage() {
       supersedesId: dist.supersedesId,
       supersededBy,
     });
-    /* A correction can be prepared once a question has been answered with "a
-       correction is needed" and nothing has replaced this one yet. */
-    const correctable =
-      queries.some((q) => q.status === 'resolved' && q.outcome === 'correction_required') &&
-      (dist.status === 'sent' || dist.status === 'confirmed') &&
-      !supersededBy;
+    /* Two doors into one engine. A live distribution can always be corrected by
+       the manager, with a reason; when a question has been answered with "a
+       correction is needed", the question IS the reason and no note is asked
+       for. Neither is offered once something has replaced this one. */
+    const live = (dist.status === 'sent' || dist.status === 'confirmed') && !supersededBy;
+    const answeredQuery =
+      queries.some((q) => q.status === 'resolved' && q.outcome === 'correction_required');
+    const correctable = live && answeredQuery;
+    const managerCorrectable = live && !answeredQuery;
+    const corrSource = correctionSourceOf({
+      supersedesId: dist.supersedesId,
+      triggerQueryId: dist.triggerQueryId,
+      correctionReason: dist.correctionReason,
+    });
 
-    const startCorrection = async () => {
-      const result = await history.createReplacement(dist.id);
+    const startCorrection = async (
+      correction?: { reason: CorrectionReason; note: string },
+    ) => {
+      const result = await history.createReplacement(dist.id, correction);
       if (!result.ok) {
         show(t(DISTRIBUTION_FAILURE_KEY[result.failure ?? 'unknown']));
         return;
       }
+      setCorrecting(false);
+      setCorrNote('');
       if (result.value) navigate(`/manager/distributions/${result.value}`);
+    };
+
+    const correctionNote = trimmedNote(corrNote);
+    const submitManagerCorrection = () => {
+      if (correctionNote.length === 0) {
+        show(t('corrErrNeedsReason'));
+        return;
+      }
+      void startCorrection({ reason: corrReason, note: correctionNote });
     };
 
     const answer = async (outcome: 'no_correction' | 'correction_required') => {
@@ -259,6 +285,21 @@ export function DistributionDetailPage() {
           <Card padding="padded">
             <div className={ui.stackTight}>
               <Badge tone="quiet">{t('corrCorrected')}</Badge>
+              {/* Which door this correction came through, read off the record
+                  itself: a trigger query means an employee asked, a reason
+                  means the manager found it. The two are mutually exclusive
+                  in the database, so this never has to guess. */}
+              {corrSource ? (
+                <p className={ui.rowMeta}>
+                  {t(corrSource === 'manager' ? 'corrByManager' : 'corrByQuestion')}
+                </p>
+              ) : null}
+              {corrSource === 'manager' && dist.correctionReason ? (
+                <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                  {t('corrReasonGiven')}: {t(CORRECTION_REASON_LABEL[dist.correctionReason])}
+                  {dist.correctionNote ? ` — ${dist.correctionNote}` : ''}
+                </p>
+              ) : null}
               <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
                 {isDraft ? t('corrDraftNote') : t('corrOfNote')}
               </p>
@@ -307,6 +348,13 @@ export function DistributionDetailPage() {
         {correctable ? (
           <Button variant="secondary" onClick={() => void startCorrection()}>
             {t('corrStart')}
+          </Button>
+        ) : null}
+
+        {/* The second door: the manager found it themselves. */}
+        {managerCorrectable ? (
+          <Button variant="secondary" onClick={() => setCorrecting(true)}>
+            {t('corrMgrStart')}
           </Button>
         ) : null}
 
@@ -452,6 +500,51 @@ export function DistributionDetailPage() {
               {t('qMgrCorrection')}
             </Button>
             <Note>{t('qMgrCorrectionHelp')}</Note>
+          </div>
+        </Sheet>
+
+        {/* The manager's own door into the same engine. Same replacement, same
+            lineage, same audit — the only difference is where the reason comes
+            from, so this sheet asks for it and nothing else. */}
+        <Sheet
+          open={correcting}
+          title={t('corrMgrTitle')}
+          onClose={() => setCorrecting(false)}
+        >
+          <div className={ui.stackTight}>
+            <Note>{t('corrMgrIntro')}</Note>
+
+            <SectionLabel>{t('corrMgrReasonLabel')}</SectionLabel>
+            <ChipGroup<CorrectionReason>
+              label={t('corrMgrReasonLabel')}
+              options={CORRECTION_REASONS.map((reason) => ({
+                value: reason,
+                label: t(CORRECTION_REASON_LABEL[reason]),
+              }))}
+              value={corrReason}
+              onChange={setCorrReason}
+            />
+
+            <label className={ui.fieldLabel} htmlFor="correction-note">
+              {t('corrMgrNoteLabel')}
+            </label>
+            <textarea
+              id="correction-note"
+              className={ui.fieldInput}
+              rows={3}
+              maxLength={CORRECTION_NOTE_MAX}
+              placeholder={t('corrMgrNotePlaceholder')}
+              value={corrNote}
+              onChange={(event) => setCorrNote(event.target.value)}
+              style={{ resize: 'none', lineHeight: 1.5, paddingTop: 10, height: 'auto' }}
+            />
+
+            <Button disabled={correctionNote.length === 0} onClick={submitManagerCorrection}>
+              {t('corrMgrCreate')}
+            </Button>
+            <Button variant="ghost" onClick={() => setCorrecting(false)}>
+              {t('corrMgrCancel')}
+            </Button>
           </div>
         </Sheet>
       </Screen>

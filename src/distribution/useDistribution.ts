@@ -7,7 +7,7 @@ import {
   classifyDistributionError,
   type DistributionFailure,
 } from '@/distribution/errors';
-import type { AckStateRow, MyQuery, QueryRow } from '@/distribution/ack';
+import type { AckStateRow, CorrectionReason, MyQuery, QueryRow } from '@/distribution/ack';
 import * as api from '@/distribution/queries';
 import type {
   ActiveRule,
@@ -273,10 +273,10 @@ export function useDistributionHistory() {
 
   /** Starts a correction and returns the draft's id. */
   const createReplacement = useCallback(
-    async (originalId: string) => {
+    async (originalId: string, correction?: { reason: CorrectionReason; note: string }) => {
       if (!client) return { ok: false as const, failure: 'notConfigured' as const };
       try {
-        const id = await api.createReplacement(client, originalId);
+        const id = await api.createReplacement(client, originalId, correction);
         await refresh();
         return { ok: true as const, value: id };
       } catch (error) {

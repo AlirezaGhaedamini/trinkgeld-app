@@ -8,6 +8,7 @@
 // The CLI's own `Tables<>` helper already spans tables and views, so the
 // member-facing views are addressed through it rather than a second alias.
 import type { Enums, Tables } from '@/types/database';
+import type { CorrectionReason } from '@/distribution/ack';
 
 export type DistributionStatus = Enums<'distribution_status'>;
 export type PoolStatus = Enums<'pool_status'>;
@@ -93,6 +94,9 @@ export interface Distribution {
   supersededBy: string | null;
   /** The question whose answer caused this correction. */
   triggerQueryId: string | null;
+  /** Why a manager corrected this themselves. Null on the employee-query path. */
+  correctionReason: CorrectionReason | null;
+  correctionNote: string | null;
 }
 
 export function toPool(row: Tables<'tip_pools'>): TipPool {
@@ -172,6 +176,8 @@ export function toDistribution(row: Tables<'tip_distributions'>): Distribution {
     // know what replaced it.
     supersededBy: null,
     triggerQueryId: row.trigger_query_id,
+    correctionReason: row.correction_reason,
+    correctionNote: row.correction_note,
   };
 }
 
@@ -216,7 +222,11 @@ export function toMemberDistribution(row: Tables<'member_distributions'>): Distr
     acknowledgementRequired: row.acknowledgement_required ?? true,
     supersedesId: row.supersedes_id,
     supersededBy: row.superseded_by,
+    // The member view carries the reason but never the question id, the actor
+    // or the timestamps: an employee is told why, not who or when.
     triggerQueryId: null,
+    correctionReason: row.correction_reason,
+    correctionNote: row.correction_note,
   };
 }
 

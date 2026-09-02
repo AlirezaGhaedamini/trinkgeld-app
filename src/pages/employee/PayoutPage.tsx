@@ -9,7 +9,9 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { distributionById, latestDistribution, shareOf } from '@/state/selectors';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
-import { ACK_VIEW, QUERY_NOTE_MAX, ackViewFor, acknowledgedAtFor } from '@/distribution/ack';
+import {
+  ACK_VIEW, CORRECTION_REASON_LABEL, QUERY_NOTE_MAX, ackViewFor, acknowledgedAtFor,
+} from '@/distribution/ack';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -281,6 +283,18 @@ export function PayoutPage() {
               <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
                 {t('corrEmpCurrent')}
               </p>
+              {/* A correction nobody asked for needs saying out loud, with the
+                  reason the manager gave. The view carries no actor and no
+                  timestamp, so this says why and never who. */}
+              {realDistribution.correctionReason ? (
+                <p className={ui.noteBody} style={{ fontSize: 13, lineHeight: 1.5 }}>
+                  {t('corrEmpByManager')} {t('corrReasonGiven')}:{' '}
+                  {t(CORRECTION_REASON_LABEL[realDistribution.correctionReason])}
+                  {realDistribution.correctionNote
+                    ? ` — ${realDistribution.correctionNote}`
+                    : ''}
+                </p>
+              ) : null}
               <Button
                 variant="secondary"
                 onClick={() => navigate(`/payout/${realDistribution.supersedesId}`)}

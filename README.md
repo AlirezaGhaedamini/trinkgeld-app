@@ -92,6 +92,22 @@ it, and confirmed from scratch. The correction reuses the original's pool, so a
 tip report can never fund two payouts — and a pool that has paid out cannot be
 distributed again except as an explicit replacement.
 
+**Phase 3K — the manager finds it first. Complete.** A manager who spots the
+error themselves opens the same correction flow, without waiting for anybody to
+ask a question and without one being invented on their behalf. They say what was
+wrong — a category and a sentence — and TipCrew creates the corrected version
+exactly as it does after a question: same engine, same pool, same lineage, same
+fresh confirmation. The two routes are mutually exclusive on the record, so a
+correction always says plainly whether it followed a question or the manager's
+own finding. The employee is told why their payout was corrected; who touched it
+is manager-side audit and stays there.
+
+The first live run of this phase found a real defect: the backend rejected a
+blank explanation using PostgreSQL's one-argument `btrim()`, which trims spaces
+and nothing else, so a note of tabs and newlines was accepted as a reason.
+Migration 25 gives the function and the table constraint one shared definition
+of "blank" that names every whitespace character explicitly.
+
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
 reproduces its layout, colours, spacing, typography and interactions.
@@ -370,6 +386,7 @@ node scripts/members-check.mjs     # Phase 3G: roster, assignments, suspension, 
 node scripts/acknowledgement-check.mjs # Phase 3H: confirmation, multi-area entries, tallies
 node scripts/query-check.mjs       # Phase 3I: questions, resolution, cancelled distributions
 node scripts/replacement-check.mjs # Phase 3J: corrections, lineage, one payout per pool
+node scripts/manager-correction-check.mjs # Phase 3K: the manager's own correction door
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test

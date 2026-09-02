@@ -38,6 +38,9 @@ export type DistributionFailure =
   | 'corrAlready'
   | 'corrNotCorrectable'
   | 'poolSpent'
+  | 'corrNeedsReason'
+  | 'corrReasonLong'
+  | 'corrDoubleReason'
   | 'network'
   | 'notConfigured'
   | 'unknown';
@@ -73,6 +76,9 @@ export const DISTRIBUTION_FAILURE_KEY: Record<DistributionFailure, StringKey> = 
   corrAlready: 'corrAlready',
   corrNotCorrectable: 'corrNotCorrectable',
   poolSpent: 'corrPoolSpent',
+  corrNeedsReason: 'corrErrNeedsReason',
+  corrReasonLong: 'corrErrReasonLong',
+  corrDoubleReason: 'corrErrDoubleReason',
   network: 'authNetwork',
   notConfigured: 'authNotConfigured',
   unknown: 'authUnknown',
@@ -116,6 +122,10 @@ export function classifyDistributionError(error: unknown): DistributionFailure {
   // Acknowledgement and the query loop first: these all carry 42501 or 22023,
   // which the catch-alls below would otherwise report as "you are not a
   // manager" or swallow entirely.
+  if (message.includes('a correction needs a sentence')) return 'corrNeedsReason';
+  if (message.includes('that reason is too long')) return 'corrReasonLong';
+  if (message.includes('already has its reason')) return 'corrDoubleReason';
+  if (message.includes('say what needs correcting')) return 'corrNeedsQuery';
   if (message.includes('says it needs correcting')) return 'corrNeedsQuery';
   if (message.includes('already been corrected')) return 'corrAlready';
   if (message.includes('already been replaced or cancelled')) return 'corrNotCorrectable';

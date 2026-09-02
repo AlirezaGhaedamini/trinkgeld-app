@@ -676,6 +676,143 @@ to send arithmetic that no longer matches the hours.
 
 ---
 
+## 4h. Manager-initiated corrections (migration 24)
+
+Migration 23 could only start a correction after an employee had asked a
+question and the manager had answered it "a correction is needed". A manager who
+spots the error first had nowhere to go — and the tempting fix, writing a
+question on the employee's behalf, would have put words in their mouth and
+corrupted the query history. This adds a second **door**, not a second engine.
+
+### One entry point, two doors
+
+`create_replacement_distribution()` gains two arguments, both defaulting to
+null:
+
+| call | `p_reason` | `p_note` | the reason is |
+| --- | --- | --- | --- |
+| employee door | null | must be null | the resolved `correction_required` query |
+| manager door | required | required, non-blank, ≤ 500 | the manager's own words |
+
+Everything after the branch is byte-for-byte the Phase 3J path: the same lock on
+the original, the same manager check, the same "already corrected" test, the
+same transaction-local settings, the same call into `calculate_distribution()`,
+the same pool. Passing only `p_original_id` still resolves here, so the Phase 3J
+caller is unchanged; the old one-argument signature is **dropped** rather than
+left beside this one, because two overloads reachable by the same single-key
+call is an ambiguity PostgREST would have to guess at.
+
+No question is ever created. On the manager door `trigger_query_id` stays null,
+and `distribution_queries` is not written at all.
+
+### The reason is data, and the row enforces its shape
+
+Four columns on `tip_distributions`: `correction_reason` (a
+`public.correction_reason` enum — hours, area, role, multiplier, tip_amount,
+rule, other), `correction_note`, `initiated_by`, `initiated_at`.
+
+Two constraints do the work a comment cannot:
+
+- `distributions_correction_reason_shape` — a reason may only exist on a row
+  that supersedes something, and it must come with a note of 1–500 characters
+  **after trimming**. A blank note is not a reason.
+- `distributions_one_correction_source` — `trigger_query_id` and
+  `correction_reason` are mutually exclusive. A row can never claim both doors,
+  so nothing downstream has to decide which one to believe.
+
+The mutual exclusion is a constraint rather than a derived column because a view
+that computed "manager if `trigger_query_id` is null" would happily disagree
+with the lineage the moment a row went wrong; a check constraint makes the bad
+row unwritable instead.
+
+### Who, derived and frozen
+
+`initiated_by` is `app.member_id(workplace)` — the server's answer, from the
+session, in the same call. Nothing in the request can set it: the request has no
+actor argument, and `app.guard_distribution_lineage()` now covers all four new
+columns exactly as it covers `supersedes_id`. Written by hand at INSERT: refused.
+Changed afterwards, by a manager or by anyone: refused.
+
+The four columns are stamped by an `UPDATE` **after** `calculate_distribution()`
+returns, in the same transaction. That is deliberate — this phase adds a reason
+to a distribution and does not touch the money path.
+
+### Idempotency
+
+Calling again replaces the draft, exactly as in Phase 3J, and the new draft
+carries the reason given on **that** call. A draft has been shown to nobody, so
+there is no history to overwrite; a manager who changes their mind about why
+they are correcting something should not have to cancel a draft to say so. Once
+sent, the reason is frozen with the distribution, and correcting again is a new
+link in the chain with a reason of its own.
+
+### What the employee is told
+
+`member_distributions` gains `correction_reason` and `correction_note`, and
+nothing else. Not `initiated_by`, not `initiated_at`, not `trigger_query_id`.
+An employee is told **why** their payout was corrected — the reason is theirs to
+know — and never **who** touched it or **when**, which is manager-side audit and
+belongs in `audit_log`.
+
+---
+
+## 4i. What "blank" means (migration 25)
+
+The first live Phase 3K run found a real defect, and it is worth writing down
+because the mistake is easy to repeat.
+
+Migration 24 rejected a blank note with the **one-argument** form of `btrim()`,
+in the RPC and in `distributions_correction_reason_shape` alike:
+
+```sql
+nullif(pg_catalog.btrim(coalesce(p_note, '')), '')
+```
+
+`btrim(string)` removes **spaces**, and only spaces. Not a tab, not a newline,
+not a carriage return, form feed or vertical tab — the default `characters`
+argument is a single space, which is easy to read as "whitespace" and is not.
+
+So a note of `E'    \n\t  '` trimmed down to `E'\n\t'`: two characters, safely
+"between 1 and 500", accepted by the function and by the constraint. The request
+was then a *valid* request, and the RPC did what a valid request deserves —
+created the replacement draft, wrote the lineage, stamped the actor, calculated
+the entries. Two live checks failed on that one cause: the whitespace note was
+accepted, and the draft it created was found by the next check.
+
+**Not an ordering or atomicity problem.** Validation already ran before
+`calculate_distribution()`, the function is one transaction, and a raise rolls
+the whole call back. The blank-note and 501-character requests each left exactly
+zero rows. Validation was reached; it simply said yes.
+
+The fix is one immutable helper, `app.trimmed_note(text)`, used by **both** the
+function and the constraint so the two can never again hold different opinions
+about what a reason is. It names its characters explicitly:
+
+```sql
+btrim(coalesce(p_text, ''), E' \t\n\r\f\v\u00A0\u202F\u200B\u3000\uFEFF')
+```
+
+ASCII whitespace, plus the four invisible characters a paste out of a word
+processor actually produces. The set is written out rather than left to a
+regular expression class: `\s` in a POSIX ARE is locale-dependent — on this very
+database it failed to match a vertical tab — and a check constraint has to be
+`IMMUTABLE` and give the same answer for ever.
+
+Migration 25 also normalises what migration 24 admitted, because
+`ALTER TABLE ... ADD CONSTRAINT` validates existing rows. A note with real
+content is stored trimmed; a draft whose note was nothing but whitespace is
+deleted, since it is a row the backend should have refused, has been published
+to nobody, and is recalculated from scratch on the next attempt. If a *sent*
+distribution ever carried one, the migration raises rather than changing it
+quietly.
+
+The screen uses the same character set (`trimmedNote()` in
+`src/distribution/ack.ts`), so the Create button never offers a correction the
+server is going to refuse. JavaScript's own `.trim()` is close but not identical
+— it leaves a zero-width space standing.
+
+---
+
 ## 5. Security model
 
 ### Roles

@@ -299,3 +299,68 @@ export function correctionDeltas(
   }
   return out.sort((a, b) => a.memberName.localeCompare(b.memberName));
 }
+
+/* ── manager-initiated corrections ───────────────────────────────────────── */
+
+/**
+ * Why a manager corrected a distribution themselves.
+ *
+ * Mirrors the `correction_reason` enum. A correction raised by an employee's
+ * question has none of these — the question is the reason — so the two are
+ * mutually exclusive, in the database and here.
+ */
+export type CorrectionReason =
+  | 'hours' | 'area' | 'role' | 'multiplier' | 'tip_amount' | 'rule' | 'other';
+
+export const CORRECTION_REASONS: CorrectionReason[] = [
+  'hours', 'area', 'role', 'multiplier', 'tip_amount', 'rule', 'other',
+];
+
+export const CORRECTION_REASON_LABEL: Record<CorrectionReason, StringKey> = {
+  hours: 'corrReasonHours',
+  area: 'corrReasonArea',
+  role: 'corrReasonRole',
+  multiplier: 'corrReasonMultiplier',
+  tip_amount: 'corrReasonTipAmount',
+  rule: 'corrReasonRule',
+  other: 'corrReasonOther',
+};
+
+/** The longest a correction note may be, matching the column check. */
+export const CORRECTION_NOTE_MAX = 500;
+
+/**
+ * What the database means by a blank correction note.
+ *
+ * The same explicit character set `app.trimmed_note()` uses in migration 25 —
+ * ASCII whitespace plus the four invisible characters a paste out of a word
+ * processor actually produces. JavaScript's own `.trim()` is close but not the
+ * same: it leaves a zero-width space standing, which the screen would then
+ * accept and the backend would refuse. Keeping the two definitions identical is
+ * what stops the button from offering a correction the server will reject.
+ */
+const NOTE_BLANK =
+  /^[ \t\n\r\f\v\u00a0\u202f\u200b\u3000\ufeff]+|[ \t\n\r\f\v\u00a0\u202f\u200b\u3000\ufeff]+$/g;
+
+export function trimmedNote(value: string): string {
+  return value.replace(NOTE_BLANK, '');
+}
+
+/**
+ * Which door a correction came through.
+ *
+ * Derived, never stored: a replacement either names the question that prompted
+ * it or carries the manager's own reason, and a stored third copy could
+ * disagree with both.
+ */
+export type CorrectionSource = 'employeeQuery' | 'manager' | null;
+
+export function correctionSourceOf(d: {
+  supersedesId: string | null;
+  triggerQueryId: string | null;
+  correctionReason: CorrectionReason | null;
+}): CorrectionSource {
+  if (!d.supersedesId) return null;
+  if (d.triggerQueryId) return 'employeeQuery';
+  return d.correctionReason ? 'manager' : null;
+}
