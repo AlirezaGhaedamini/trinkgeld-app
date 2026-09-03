@@ -60,6 +60,11 @@ each one is independently reviewable.
 | `…002100_acknowledgement.sql` | the frozen requirement on the member's view, one action per distribution, and the two doors made to refuse the same things — see below |
 | `…002200_query_and_resolution.sql` | the query loop: a question is an open state, it has somewhere to go, and a cancelled distribution stops accepting answers — see below |
 | `…002300_replacement_distribution.sql` | correcting a sent distribution by replacing it: lineage, one live payout per pool, no forks and no loops — see below |
+| `…002400_manager_corrections.sql` | a manager may start the same replacement flow without an employee having asked; the reason is recorded, never invented — see below |
+| `…002500_correction_note_whitespace.sql` | one shared, immutable definition of *blank*, after a live run accepted a note made of whitespace — see below |
+| `…002600_distribution_payouts.sql` | `distribution_payouts`: whether a finalized distribution was actually paid, settled as a delta down a lineage — see below |
+| `…002700_payout_reversals.sql` | `distribution_payout_reversals`: a payout is never edited or deleted, only contradicted by a second immutable event — see below |
+| `…002800_period_close_and_export.sql` | `financial_period_closes` and the read-only export: a checkpoint over rows that are already immutable — see below |
 
 ---
 
@@ -996,6 +1001,163 @@ views move to it; `payout_status` is left exactly as migration 26 wrote it.
 settled" — the amount a payout *would* record. Correct while unpaid, and easy to
 misread as an outstanding debt on a paid row. It is now zero once this version
 has a payout that still counts.
+
+---
+
+## 4l. Period close and the financial export (migration 28)
+
+A close records that a manager reviewed and closed a period at a point in time.
+It deletes nothing, recalculates nothing, moves no money, hides no history and
+files nothing with anybody. The export is a read-only view of what the database
+already says.
+
+### What the audit found before anything was written
+
+1. **A financial period is already modelled, in business dates.** A pool is
+   built from `tip_reports.work_date`; a distribution copies the pool's
+   `period_start` and `period_end`; and `work_date` is written by
+   `app.shifts_before_write()` via `app.business_day()`, which is the
+   workplace's own timezone minus its `business_day_start_hour`. So "1 Sep –
+   7 Sep" already means seven business days *of that workplace*. **No new date
+   arithmetic was added anywhere, and none belongs in the browser** — the two
+   date inputs on the screen are passed through untouched.
+2. **The financial rows are already immutable or versioned.** A sent
+   distribution cannot change; its entries cannot change; a payout and a
+   reversal each have a guard with no escape. So a close does not need to freeze
+   anything and does not need a snapshot of rows that cannot move. It is a
+   checkpoint, not a freeze.
+3. **`btree_gist` was already installed**, for the shift overlap constraint. So
+   "closed periods must not overlap" is an `EXCLUDE` constraint — an
+   index-backed guarantee rather than a trigger that races.
+4. **Nothing like this existed.** The one "Export" in the product was a
+   demo-mode toast on the employee profile screen, backed by nothing.
+5. **Settlement events belong to the distribution's period, not to the date they
+   were recorded.** A payout entered in October for a distribution of 3
+   September is September's money. The export follows the distribution, never
+   `paid_at` — which is what lets a period stay complete as it is settled.
+
+### A close does not stop a correction
+
+A mistake found in October about a September shift is still a mistake, and the
+replacement architecture is how this product fixes one. So the close stays
+exactly as it was, the correction is allowed, and **the export marks every
+record that arrived after the close** so nobody is left believing the closed
+figures already contained it. `records_after_close` counts them.
+
+The alternative — refusing corrections inside a closed period — would either
+push managers to never close, or push a real correction into a side channel
+where this product cannot see it. Neither makes the figures more true.
+
+### The table
+
+```sql
+create table public.financial_period_closes (
+  id uuid primary key default gen_random_uuid(),
+  workplace_id uuid not null references public.workplaces (id) on delete cascade,
+  period_start date not null,
+  period_end   date not null,
+  note text, closed_at timestamptz not null default now(),
+  closed_by uuid references public.workplace_members (id) on delete set null,
+  ...
+  constraint closes_note_shape
+    check (note is null or length(app.trimmed_note(note)) between 1 and 500),
+  constraint closes_no_overlap exclude using gist (
+    workplace_id with =, daterange(period_start, period_end, '[]') with &&));
+```
+
+`daterange(..., '[]')` is inclusive at both ends, so 1–7 and 8–14 are
+neighbours and 1–7 and 5–10 are not allowed. Because the guarantee is an index,
+two managers closing overlapping ranges at the same instant are decided by the
+database rather than by whoever's button was disabled last. `closes_note_shape`
+reuses migration 25's `app.trimmed_note()` rather than forming a second opinion
+about what blank means.
+
+`closes_are_immutable` refuses every `UPDATE` and `DELETE`. There is no insert
+policy at all — `close_financial_period()` is the only door.
+
+### What blocks a close, and what merely gets said
+
+`financial_period_readiness()` splits them, and the split is the product
+decision of this phase.
+
+**Blocking**, because each one means the period's financial result is not yet
+decided:
+
+| blocker | why |
+| --- | --- |
+| `draft_distributions` | a night calculated and never sent |
+| `draft_corrections` | a replacement prepared and never published |
+| `open_questions` | somebody asked and nobody has answered |
+| `agreed_corrections_not_sent` | the manager agreed the figure was wrong and the corrected version does not exist yet |
+| `overlapping_close` | part of this period is already closed |
+
+**Not blocking**, deliberately:
+
+- `unpaid_distributions`. A workplace routinely closes the calculation for a
+  week and pays it out with the monthly payroll run. Refusing to close until the
+  money has moved would make the feature useless to exactly the businesses it is
+  for.
+- `unacknowledged_shares`. A person on holiday should not hold up a close.
+
+Both are surfaced as warnings, and the confirmation sheet repeats them where
+the decision is actually taken.
+
+### The export, and the one total that must not double
+
+`financial_period_export()` returns **one** authoritative dataset. The CSV is
+formatted from it and nothing else, so a total on a spreadsheet and a total on a
+screen cannot disagree — there is only one place either could have come from.
+
+| total | definition |
+| --- | --- |
+| `current_entitlement_cents` | what the team is owed, summed over the versions that are still **current** |
+| `replaced_entitlement_cents` | what the superseded versions said — reported beside it, never added to it |
+| `payout_total_cents` | every payout event, including ones later reversed |
+| `reversal_total_cents` | what those reversals took back, as a positive number |
+| `effective_settled_cents` | payouts that still count. This is the money. |
+| `outstanding_cents` | current entitlement minus what still counts |
+
+The rule that matters: **a replaced version contributes nothing to what is
+owed.** A replacement reuses the pool, `app.guard_pool_amounts()` freezes a
+distributed pool, and the engine refuses entries that do not sum to it — so the
+two versions of a corrected night are the same money seen twice. Adding them is
+the failure mode, and it is the one a corrected week would show as owed twice.
+
+`basis` is literally the string `current`, in the data. These figures are what
+TipCrew says **now**, not a reconstruction of what it said at the moment of
+closing. Saying so in the dataset — and on the screen — is cheaper and more
+honest than pretending to a snapshot that was never taken.
+
+### What the export does not carry
+
+Snapshot names only, read from `tip_distribution_entries`, which froze them when
+the night was calculated — so a later rename does not rewrite what a person was
+paid under. No `profiles` row is read at all. No email, no auth id, no member id,
+no employee number, no join code, no token.
+
+### Manager-only, three times over
+
+All three functions are `security definer` and each one calls
+`app.is_manager(p_workplace_id)` before answering. The browser sends a workplace
+id because it has to name which workplace it means; naming one is not being let
+into it. It sends no actor and no timestamp — `close_financial_period()` derives
+both from the session and the server.
+
+### CSV, and the PDF that was not built
+
+CSV is written with a UTF-8 BOM, semicolon delimiters and CRLF endings: the
+combination German Excel opens correctly on a double-click. Without the BOM the
+umlauts arrive as mojibake; with commas the whole row lands in one column. Every
+amount appears twice — once as integer cents, which no locale can misread, and
+once formatted with a comma decimal, which is the one a person reads.
+
+**PDF was not implemented.** Every route to it in the browser is a large
+dependency (pdfmake, jsPDF + autotable, pdf-lib with fonts embedded) measured in
+hundreds of kilobytes, on a mobile-first product whose entire bundle is smaller
+than that. The zero-dependency path — a print stylesheet, and the browser's own
+"Save as PDF" — produces a better-looking document than a generated one, costs
+nothing, and is not built here either: it is a UI change, not a backend one, and
+the brief asked for the architecture to be reported rather than guessed at.
 
 ---
 

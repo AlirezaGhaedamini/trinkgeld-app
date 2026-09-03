@@ -135,6 +135,33 @@ button. And a payment that a later corrected version was already settled
 against cannot be reversed at all — unwind the later one first — because
 otherwise that later settlement would describe money nobody handed over.
 
+**Phase 3N — closing a period, and taking the figures away. Complete.** A
+manager can close a week or a month once they have reviewed it, and download the
+result as a spreadsheet. A close records a decision and nothing more: it deletes
+nothing, recalculates nothing and moves no money.
+
+It also does not freeze anything, and that is deliberate. A mistake found in
+October about a September shift is still a mistake, and correcting it is how
+this product fixes one — so corrections stay allowed inside a closed period, the
+close stays exactly as it was, and the export marks every record that arrived
+afterwards. The alternative would either stop managers ever closing, or push a
+real correction somewhere TipCrew cannot see it.
+
+What blocks a close is work that leaves the period's result undecided: a night
+never sent, a correction never published, a question nobody answered. What does
+not block it is money that has not moved yet — a workplace closes the
+calculation for a week and pays it with the monthly payroll run, and refusing
+that would make the feature useless to exactly the businesses it is for. Unpaid
+work is said out loud instead, on the screen and again in the confirmation.
+
+The figures come from one dataset with one definition per total, and the
+spreadsheet is formatted from it and nothing else, so a number on a screen and a
+number in Excel cannot disagree. The rule that matters most: a corrected night
+is counted **once**. The original and the replacement are the same money seen
+twice, and adding them would show a corrected week as owed double. The file is
+written for German Excel — UTF-8 BOM, semicolons, CRLF — with every amount
+present twice, as integer cents and in the decimal form a person reads.
+
 The design reference is `TipCrew Prototype.html` in this repository — the
 original clickable prototype. It is kept as-is, unmodified, and the React app
 reproduces its layout, colours, spacing, typography and interactions.
@@ -416,6 +443,7 @@ node scripts/replacement-check.mjs # Phase 3J: corrections, lineage, one payout 
 node scripts/manager-correction-check.mjs # Phase 3K: the manager's own correction door
 node scripts/payout-check.mjs      # Phase 3L: payout, settlement lineage, exactly-once
 node scripts/payout-reversal-check.mjs # Phase 3M: reversal events, effective settlement
+node scripts/period-close-check.mjs # Phase 3N: period close, lineage-aware export totals
 ```
 
 Both read `.env.local` and a gitignored `.env.test.local` holding two test

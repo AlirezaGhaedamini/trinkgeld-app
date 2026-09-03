@@ -89,6 +89,39 @@ export type Database = {
           },
         ]
       }
+      financial_period_closes: {
+        Row: {
+          id: string
+          workplace_id: string
+          period_start: string
+          period_end: string
+          note: string | null
+          closed_at: string
+          closed_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          workplace_id: string
+          period_start: string
+          period_end: string
+          note?: string | null
+          closed_at?: string
+          closed_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          workplace_id?: string
+          period_start?: string
+          period_end?: string
+          note?: string | null
+          closed_at?: string
+          closed_by?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       distribution_payout_reversals: {
         Row: {
           id: string
@@ -1771,6 +1804,23 @@ export type Database = {
           p_workplace_id: string
         }
         Returns: string
+      }
+      close_financial_period: {
+        Args: {
+          p_workplace_id: string
+          p_period_start: string
+          p_period_end: string
+          p_note?: string | null
+        }
+        Returns: string
+      }
+      financial_period_readiness: {
+        Args: { p_workplace_id: string; p_period_start: string; p_period_end: string }
+        Returns: Json
+      }
+      financial_period_export: {
+        Args: { p_workplace_id: string; p_period_start: string; p_period_end: string }
+        Returns: Json
       }
       reverse_distribution_payout: {
         Args: {

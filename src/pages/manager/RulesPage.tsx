@@ -477,6 +477,14 @@ function RealRules() {
           <span className={ui.rowValue}>{state?.settings.timezone ?? '—'}</span>
           <Icon name="caret-right" size={13} className={ui.chevron} />
         </button>
+        <button
+          type="button"
+          className={`${ui.insetRow} ${ui.insetRowInteractive}`}
+          onClick={() => navigate('/manager/rules/period')}
+        >
+          <span className={`${ui.rowMain} ${ui.rowTitle}`}>{t('pcHubRow')}</span>
+          <Icon name="caret-right" size={13} className={ui.chevron} />
+        </button>
       </Card>
     </Screen>
   );

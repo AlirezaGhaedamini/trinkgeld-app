@@ -51,6 +51,9 @@ export type DistributionFailure =
   | 'revNeedsNote'
   | 'revNoteLong'
   | 'revDownstream'
+  | 'periodClosed'
+  | 'periodNotReady'
+  | 'periodDates'
   | 'network'
   | 'notConfigured'
   | 'unknown';
@@ -99,6 +102,9 @@ export const DISTRIBUTION_FAILURE_KEY: Record<DistributionFailure, StringKey> = 
   revNeedsNote: 'revErrNeedsNote',
   revNoteLong: 'revErrNoteLong',
   revDownstream: 'revErrDownstream',
+  periodClosed: 'pcErrClosed',
+  periodNotReady: 'pcErrNotReady',
+  periodDates: 'pcErrDates',
   network: 'authNetwork',
   notConfigured: 'authNotConfigured',
   unknown: 'authUnknown',
@@ -184,6 +190,12 @@ export function classifyDistributionError(error: unknown): DistributionFailure {
   // Before the generic rules below, and before payoutAlready: a reversal also
   // answers 23505, and reading "already reversed" as "already paid" would send a
   // manager looking for a payment that is exactly what they are trying to undo.
+  // Period close, before the generic 23505/42501 rules below.
+  if (message.includes('has already been closed')) return 'periodClosed';
+  if (message.includes('still has work in it')) return 'periodNotReady';
+  if (message.includes('ends before it starts') || message.includes('that is not a period')) {
+    return 'periodDates';
+  }
   if (message.includes('has already been reversed')) return 'revAlready';
   if (message.includes('say why this payout is being reversed')) return 'revNeedsReason';
   if (message.includes('a reversal needs a sentence')) return 'revNeedsNote';

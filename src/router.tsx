@@ -36,6 +36,7 @@ import { RulesPage } from '@/pages/manager/RulesPage';
 import { AreasPage } from '@/pages/manager/AreasPage';
 import { RolesPage } from '@/pages/manager/RolesPage';
 import { WorkplaceSettingsPage } from '@/pages/manager/WorkplaceSettingsPage';
+import { PeriodClosePage } from '@/pages/manager/PeriodClosePage';
 import { StaffReportsPage } from '@/pages/manager/StaffReportsPage';
 import { OverlapPage } from '@/pages/manager/OverlapPage';
 
@@ -118,6 +119,7 @@ export function AppRoutes() {
               <Route path="/manager/rules/areas" element={<AreasPage />} />
               <Route path="/manager/rules/roles" element={<RolesPage />} />
               <Route path="/manager/rules/workplace" element={<WorkplaceSettingsPage />} />
+              <Route path="/manager/rules/period" element={<PeriodClosePage />} />
               <Route path="/manager/reports" element={<StaffReportsPage />} />
               <Route path="/manager/invite" element={<InvitePage />} />
               <Route path="/manager/team/:employeeId" element={<MemberPage />} />
