@@ -50,11 +50,14 @@ begin;
     :'nw', 'n.ghost@test.local', 'Gil Ghost', 'employee', :'n_service', :'n_server') as t \gset tok_n3_
 commit;
 begin; select tests.as_user('a1100000-0000-0000-0000-000000000002');
-       select public.accept_invitation(:'tok_n1_token') as n_staff \gset commit;
+       select public.accept_invitation(:'tok_n1_token') as n_staff \gset
+commit;
 begin; select tests.as_user('a1100000-0000-0000-0000-000000000003');
-       select public.accept_invitation(:'tok_n2_token') as n_bar_m \gset commit;
+       select public.accept_invitation(:'tok_n2_token') as n_bar_m \gset
+commit;
 begin; select tests.as_user('a1100000-0000-0000-0000-000000000005');
-       select public.accept_invitation(:'tok_n3_token') as n_ghost \gset commit;
+       select public.accept_invitation(:'tok_n3_token') as n_ghost \gset
+commit;
 
 -- The same person in a SECOND workplace, so multi-workplace isolation is a fact
 -- about the fixture rather than an assumption.
@@ -64,7 +67,8 @@ begin;
     :'nx', 'n.staff@test.local', 'Nia Elsewhere', 'employee', null, null) as t \gset tok_nx_
 commit;
 begin; select tests.as_user('a1100000-0000-0000-0000-000000000002');
-       select public.accept_invitation(:'tok_nx_token') as n_staff_x \gset commit;
+       select public.accept_invitation(:'tok_nx_token') as n_staff_x \gset
+commit;
 
 begin;
   select tests.as_user('a1100000-0000-0000-0000-000000000001');

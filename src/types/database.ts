@@ -1847,6 +1847,10 @@ export type Database = {
         }
         Returns: string
       }
+      manager_dashboard: {
+        Args: { p_workplace_id: string }
+        Returns: Json
+      }
       mark_notification_read: {
         Args: { p_notification_id: string }
         Returns: undefined
