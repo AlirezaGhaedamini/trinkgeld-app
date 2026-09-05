@@ -37,6 +37,7 @@
 .ph-arrow-left:before {  content: "\e058"; }
 .ph-backspace:before {  content: "\e0ae"; }
 .ph-bank:before {  content: "\e0b4"; }
+.ph-bell:before {  content: "\e0ce"; }
 .ph-briefcase:before {  content: "\e0ee"; }
 .ph-calendar-blank:before {  content: "\e10a"; }
 .ph-caret-right:before {  content: "\e13a"; }
@@ -84,6 +85,7 @@
 .ph-fill.ph-arrow-left:before {  content: "\e058"; }
 .ph-fill.ph-backspace:before {  content: "\e0ae"; }
 .ph-fill.ph-bank:before {  content: "\e0b4"; }
+.ph-fill.ph-bell:before {  content: "\e0ce"; }
 .ph-fill.ph-briefcase:before {  content: "\e0ee"; }
 .ph-fill.ph-calendar-blank:before {  content: "\e10a"; }
 .ph-fill.ph-caret-right:before {  content: "\e13a"; }

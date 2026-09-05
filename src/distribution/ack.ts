@@ -252,6 +252,38 @@ export function lineageOf(d: {
   return d.supersedesId ? 'correction' : 'original';
 }
 
+/**
+ * The version of a night that is current, starting from any version of it.
+ *
+ * A notification names the distribution the event happened on, which is the
+ * honest historical record and cannot be rewritten later. But by the time
+ * somebody taps it, that version may have been replaced — and a cancelled
+ * distribution is not actionable, so landing them there would be a dead end.
+ * This walks `supersededBy` forward over the rows the member can already read
+ * and returns the head.
+ *
+ * It relies on migration 31: before that fix `superseded_by` asked whether the
+ * successor was still LIVE, so it went null down a chain A <- B <- C and the
+ * walk stopped at A. Since 31 it is durable publication evidence, so each link
+ * survives being retired and the chain stays traversable.
+ *
+ * The step limit matches the database's own guard on lineage depth. Falls back
+ * to the id it was given when there is no successor, which is the common case.
+ */
+export function lineageHeadId(
+  rows: Array<{ id: string; supersededBy: string | null }>,
+  startId: string,
+): string {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  let at = startId;
+  for (let step = 0; step < 64; step += 1) {
+    const next = byId.get(at)?.supersededBy;
+    if (!next || next === at) return at;
+    at = next;
+  }
+  return at;
+}
+
 export const LINEAGE_LABEL: Record<LineageView, StringKey | null> = {
   original: null,
   replaced: 'corrReplaced',

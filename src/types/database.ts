@@ -89,6 +89,48 @@ export type Database = {
           },
         ]
       }
+      member_notifications: {
+        Row: {
+          id: string
+          workplace_id: string
+          member_id: string
+          type: Database["public"]["Enums"]["notification_type"]
+          distribution_id: string | null
+          query_id: string | null
+          payout_id: string | null
+          reversal_id: string | null
+          payload: Json
+          created_at: string
+          read_at: string | null
+        }
+        Insert: {
+          id?: string
+          workplace_id: string
+          member_id: string
+          type: Database["public"]["Enums"]["notification_type"]
+          distribution_id?: string | null
+          query_id?: string | null
+          payout_id?: string | null
+          reversal_id?: string | null
+          payload?: Json
+          created_at?: string
+          read_at?: string | null
+        }
+        Update: {
+          id?: string
+          workplace_id?: string
+          member_id?: string
+          type?: Database["public"]["Enums"]["notification_type"]
+          distribution_id?: string | null
+          query_id?: string | null
+          payout_id?: string | null
+          reversal_id?: string | null
+          payload?: Json
+          created_at?: string
+          read_at?: string | null
+        }
+        Relationships: []
+      }
       financial_period_closes: {
         Row: {
           id: string
@@ -1805,6 +1847,14 @@ export type Database = {
         }
         Returns: string
       }
+      mark_notification_read: {
+        Args: { p_notification_id: string }
+        Returns: undefined
+      }
+      mark_all_notifications_read: {
+        Args: { p_workplace_id: string }
+        Returns: number
+      }
       close_financial_period: {
         Args: {
           p_workplace_id: string
@@ -1974,6 +2024,13 @@ export type Database = {
       pool_status: "open" | "locked" | "distributed" | "void"
       query_outcome: "no_correction" | "correction_required"
       query_status: "open" | "resolved"
+      notification_type:
+        | "distribution_sent"
+        | "distribution_corrected"
+        | "query_resolved"
+        | "payout_recorded"
+        | "payout_reversed"
+        | "query_raised"
       payout_method: "cash" | "payroll" | "bank_transfer" | "other"
       payout_status: "unpaid" | "paid"
       payout_state: "unpaid" | "paid" | "reversed"

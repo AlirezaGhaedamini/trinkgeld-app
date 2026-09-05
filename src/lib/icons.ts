@@ -10,6 +10,7 @@ export type IconName =
   | 'arrow-left'
   | 'backspace'
   | 'bank'
+  | 'bell'
   | 'briefcase'
   | 'calendar-blank'
   | 'caret-right'

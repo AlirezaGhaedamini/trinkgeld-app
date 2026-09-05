@@ -13,6 +13,8 @@ import { SignUpPage } from '@/pages/auth/SignUpPage';
 import { JoinWorkplacePage } from '@/pages/auth/JoinWorkplacePage';
 import { SelectWorkplacePage } from '@/pages/auth/SelectWorkplacePage';
 
+import { NotificationsPage } from '@/pages/shared/NotificationsPage';
+
 import { HomePage } from '@/pages/employee/HomePage';
 import { MyHoursPage } from '@/pages/employee/MyHoursPage';
 import { HistoryPage } from '@/pages/employee/HistoryPage';
@@ -89,6 +91,11 @@ export function AppRoutes() {
             <Route path="/hours" element={<MyHoursPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+          </Route>
+
+          {/* Both roles have an inbox, so this sits outside the manager guard. */}
+          <Route element={<AppLayout />}>
+            <Route path="/notifications" element={<NotificationsPage />} />
           </Route>
 
           {/* ── employee, pushed screens ──────────────────────────────────── */}

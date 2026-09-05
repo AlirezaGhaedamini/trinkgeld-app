@@ -10,6 +10,7 @@ import { StatCard } from '@/components/ui/StatCard';
 import { HistoryRow } from '@/components/domain/HistoryRow';
 import { useAppState } from '@/hooks/useAppState';
 import { useDistributionRows } from '@/hooks/useDistributionRows';
+import { useNotifications } from '@/notifications/useNotifications';
 import { useI18n } from '@/hooks/useI18n';
 import { useShiftLabel } from '@/hooks/useShiftLabel';
 import { centsToAmount } from '@/lib/money';
@@ -23,6 +24,7 @@ export function DashboardPage() {
   const shift = useShiftLabel();
   const navigate = useNavigate();
   const rows = useDistributionRows();
+  const inbox = useNotifications();
 
   const managerName = state.employees.find((e) => e.id === state.session.employeeId)?.name ?? '';
   const pending = pendingDistribution(state);
@@ -38,6 +40,11 @@ export function DashboardPage() {
       titleSize={22}
       back={false}
       aboveTabs
+      action={{
+        icon: 'bell',
+        label: inbox.unread > 0 ? String(inbox.unread) : undefined,
+        onClick: () => navigate('/notifications'),
+      }}
     >
       {pending ? (
         <Card tone="warning" padding="roomy">

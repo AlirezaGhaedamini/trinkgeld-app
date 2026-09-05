@@ -9,6 +9,7 @@ import { SectionLabel } from '@/components/ui/SectionLabel';
 import { HistoryRow } from '@/components/domain/HistoryRow';
 import { useAppState } from '@/hooks/useAppState';
 import { useDistributionRows } from '@/hooks/useDistributionRows';
+import { useNotifications } from '@/notifications/useNotifications';
 import { useI18n } from '@/hooks/useI18n';
 import { employeeTotals, latestDistribution, ownReport, shareOf } from '@/state/selectors';
 import { centsToAmount } from '@/lib/money';
@@ -21,6 +22,7 @@ export function HomePage() {
   const { t, money, num, dateFor, area } = useI18n();
   const navigate = useNavigate();
   const rows = useDistributionRows();
+  const inbox = useNotifications();
 
   const employeeId = state.session.employeeId;
   const employee = state.employees.find((e) => e.id === employeeId);
@@ -43,6 +45,11 @@ export function HomePage() {
       kicker={workplaceLabel}
       back={false}
       aboveTabs
+      action={{
+        icon: 'bell',
+        label: inbox.unread > 0 ? String(inbox.unread) : undefined,
+        onClick: () => navigate('/notifications'),
+      }}
     >
       <HeroCard
         kicker={t('lastShift')}

@@ -474,5 +474,8 @@ app itself the mark is the prototype's three bars, drawn inline in
 - Inter — SIL Open Font License 1.1
 - Phosphor Icons — MIT
 
-Both are subsetted into `src/assets/fonts/`; `src/styles/phosphor.css` declares
-only the 46 glyphs the app uses.
+Both live in `src/assets/fonts/`. Inter is subsetted to latin and latin-ext.
+The Phosphor **webfont is complete** — it is the *stylesheet* that is the
+subset: `src/styles/phosphor.css` declares only the icons the app uses, instead
+of the full ~9,000-rule original. Adding an icon is therefore two lines of CSS
+and one line in `src/lib/icons.ts`, and never a change to a font binary.
