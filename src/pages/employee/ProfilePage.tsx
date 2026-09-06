@@ -70,20 +70,26 @@ function RealProfile() {
 
   if (!membership) return null;
 
-  const roleLabel = membership.role === 'manager' ? t('mgrRole') : t('empRole');
+  const manager = membership.role === 'manager';
+  const roleLabel = manager ? t('mgrRole') : t('empRole');
+  const ready = assignment.status === 'ready';
   // "No area yet" is a true statement about the membership, not a default.
-  const areaLabel =
-    assignment.status === 'error'
-      ? t('loadFailed')
-      : assignment.status !== 'ready'
-        ? t('dLoading')
-        : (assignment.areaName ?? t('tmNoArea'));
-  const assignmentValue =
-    assignment.status === 'ready'
-      ? [assignment.areaName ?? t('tmNoArea'), assignment.roleName]
-          .filter((part): part is string => Boolean(part))
-          .join(' · ')
-      : areaLabel;
+  // While the names are still loading, or the read failed, the meta line says
+  // only what is certain — the role — instead of an error sentence.
+  const identityMeta = !ready
+    ? roleLabel
+    : manager
+      ? assignment.areaName
+        ? `${roleLabel} · ${assignment.areaName}`
+        : roleLabel
+      : `${roleLabel} · ${assignment.areaName ?? t('tmNoArea')}`;
+  const assignmentValue = ready
+    ? [assignment.areaName ?? t('tmNoArea'), assignment.roleName]
+        .filter((part): part is string => Boolean(part))
+        .join(' · ')
+    : assignment.status === 'error'
+      ? t('retry')
+      : t('dLoading');
   const severalWorkplaces = workplace.memberships.length > 1;
 
   const rows: SettingRow[] = [
@@ -102,15 +108,22 @@ function RealProfile() {
       valueColor: 'var(--color-accent)',
       onClick: () => navigate('/profile/language'),
     },
-    {
-      icon: 'user-focus',
-      label: t('yourAreaRole'),
-      value: assignmentValue,
-      onClick:
-        assignment.status === 'error'
-          ? () => void assignment.refresh()
-          : () => show(t('setByManager')),
-    },
+    // A manager's area is not an operational fact about them; the row is for
+    // the people whose share depends on it.
+    ...(manager
+      ? []
+      : [
+          {
+            icon: 'user-focus' as const,
+            label: t('yourAreaRole'),
+            value: assignmentValue,
+            valueColor: assignment.status === 'error' ? 'var(--color-accent)' : undefined,
+            onClick:
+              assignment.status === 'error'
+                ? () => void assignment.refresh()
+                : () => show(t('setByManager')),
+          },
+        ]),
     {
       icon: 'user',
       label: t('pfAccount'),
@@ -119,16 +132,20 @@ function RealProfile() {
   ];
 
   return (
-    <Screen title={t('profile')} titleSize={26} back={false} aboveTabs>
+    <Screen title={t('profile')} titleSize={26} back={manager ? 'arrow' : false} aboveTabs>
       <div className={styles.identity}>
         <Avatar name={membership.displayName} size={58} tinted />
         <div style={{ minWidth: 0 }}>
           <p className={styles.identityName}>{membership.displayName}</p>
-          <p className={styles.identityMeta}>{`${roleLabel} · ${areaLabel}`}</p>
+          <p className={styles.identityMeta}>{identityMeta}</p>
         </div>
       </div>
 
       <Card padding="none" clip>
+        {/* The value may be long — an email, "Restaurant floor · Senior
+            waiter" — so it is allowed to shrink and truncate, with the full
+            text on the title attribute. The shared row keeps its rule that
+            short values never shrink. */}
         {rows.map((row) =>
           row.onClick ? (
             <button
@@ -139,7 +156,11 @@ function RealProfile() {
             >
               <Icon name={row.icon} size={19} color="var(--color-text-muted)" />
               <span className={`${ui.rowMain} ${ui.rowTitle}`}>{row.label}</span>
-              <span className={`${ui.rowValue} ${ui.truncate}`} style={{ color: row.valueColor }}>
+              <span
+                className={`${ui.rowValue} ${ui.truncate}`}
+                style={{ color: row.valueColor, flexShrink: 1, minWidth: 0 }}
+                title={row.value}
+              >
                 {row.value}
               </span>
               <Icon name="caret-right" size={13} className={ui.chevron} />
@@ -148,7 +169,11 @@ function RealProfile() {
             <div key={row.label} className={ui.insetRow}>
               <Icon name={row.icon} size={19} color="var(--color-text-muted)" />
               <span className={`${ui.rowMain} ${ui.rowTitle}`}>{row.label}</span>
-              <span className={`${ui.rowValue} ${ui.truncate}`} style={{ color: row.valueColor }}>
+              <span
+                className={`${ui.rowValue} ${ui.truncate}`}
+                style={{ color: row.valueColor, flexShrink: 1, minWidth: 0 }}
+                title={row.value}
+              >
                 {row.value}
               </span>
             </div>
@@ -156,17 +181,21 @@ function RealProfile() {
         )}
       </Card>
 
-      <Card tone="faint" padding="padded">
-        <div className={styles.lockedBanner} style={{ opacity: 0.75 }}>
-          <Icon name="lock-simple" size={18} color="var(--color-text-subtle)" />
-          <div className={ui.rowMain}>
-            <p style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>{t('adminArea')}</p>
-            <p className={ui.note} style={{ marginTop: 2 }}>
-              {t('adminBody')}
-            </p>
+      {/* Employees are told the rules exist and who owns them. A manager owns
+          them, and reaches them from the Rules tab. */}
+      {manager ? null : (
+        <Card tone="faint" padding="padded">
+          <div className={styles.lockedBanner} style={{ opacity: 0.75 }}>
+            <Icon name="lock-simple" size={18} color="var(--color-text-subtle)" />
+            <div className={ui.rowMain}>
+              <p style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>{t('adminArea')}</p>
+              <p className={ui.note} style={{ marginTop: 2 }}>
+                {t('adminBody')}
+              </p>
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       <Note>{t('privacyNote')}</Note>
 

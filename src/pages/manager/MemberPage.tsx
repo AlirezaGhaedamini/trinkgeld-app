@@ -83,17 +83,30 @@ function RealMember() {
     setRole(member.role);
   }, [member]);
 
-  if (team.status === 'loading' && !member) {
+  /* Three different absences: still loading, the read failed, or the id in
+     the route is not on this workplace's roster. Only the last one is
+     "not found", and none of them is "nobody on the roster". */
+  if (!member && team.status !== 'ready' && team.status !== 'error') {
     return (
       <Screen title={t('teamMember')}>
         <EmptyState title={t('dLoading')} />
       </Screen>
     );
   }
+  if (!member && team.status === 'error') {
+    return (
+      <Screen title={t('teamMember')}>
+        <EmptyState title={t('loadFailed')} />
+        <Button variant="secondary" block onClick={() => void team.refresh()}>
+          {t('retry')}
+        </Button>
+      </Screen>
+    );
+  }
   if (!member) {
     return (
       <Screen title={t('teamMember')}>
-        <EmptyState title={t('tmEmptyRoster')} />
+        <EmptyState title={t('tmMemberNotFound')}>{t('tmMemberNotFoundBody')}</EmptyState>
       </Screen>
     );
   }

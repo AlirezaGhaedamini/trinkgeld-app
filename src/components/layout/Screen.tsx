@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { Button } from '@/components/ui/Button';
+import { useI18n } from '@/hooks/useI18n';
 import styles from '@/components/layout/layout.module.css';
 
 export interface ScreenAction {
@@ -52,6 +53,7 @@ export function Screen({
   children,
 }: ScreenProps) {
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   return (
     <>
@@ -62,7 +64,7 @@ export function Screen({
               type="button"
               className={styles.backButton}
               onClick={() => navigate(-1)}
-              aria-label="Back"
+              aria-label={back === 'close' ? t('close') : t('back')}
             >
               <Icon name={back === 'close' ? 'x' : 'arrow-left'} size={22} />
             </button>

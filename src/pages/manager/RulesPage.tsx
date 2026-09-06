@@ -482,6 +482,17 @@ function RealRules() {
           <span className={`${ui.rowMain} ${ui.rowTitle}`}>{t('pcHubRow')}</span>
           <Icon name="caret-right" size={13} className={ui.chevron} />
         </button>
+        {/* The manager's own account — language, workplace chooser, sign
+            out — lives on the shared profile screen. This is its one door
+            from the manager tabs, so it is reachable on a phone. */}
+        <button
+          type="button"
+          className={`${ui.insetRow} ${ui.insetRowInteractive}`}
+          onClick={() => navigate('/profile')}
+        >
+          <span className={`${ui.rowMain} ${ui.rowTitle}`}>{t('pfAccount')}</span>
+          <Icon name="caret-right" size={13} className={ui.chevron} />
+        </button>
       </Card>
     </Screen>
   );

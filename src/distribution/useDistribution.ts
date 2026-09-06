@@ -239,6 +239,25 @@ export function useDistributionHistory() {
   );
 
   /**
+   * The same read, keeping "no such row" and "the read failed" apart: a
+   * screen opened by a deep link has to say which one it is, and a null
+   * cannot.
+   */
+  const loadDetailResult = useCallback(
+    async (
+      id: string,
+    ): Promise<{ status: 'ready'; detail: DistributionDetail | null } | { status: 'error' }> => {
+      if (!client || !membership) return { status: 'error' };
+      try {
+        return { status: 'ready', detail: await api.fetchDistributionDetail(client, membership, id) };
+      } catch {
+        return { status: 'error' };
+      }
+    },
+    [client, membership],
+  );
+
+  /**
    * Who has answered, per entry, from the database's own definition of who is
    * able to answer at all. Kept separate from loadDetail because a manager
    * opening an old distribution wants the split immediately; the tally is a
@@ -320,6 +339,21 @@ export function useDistributionHistory() {
     [client, refresh],
   );
 
+  /** Removes a draft that was never sent. The policy allows nothing else. */
+  const discardDraft = useCallback(
+    async (id: string) => {
+      if (!client || !membership) return { ok: false as const, failure: 'notConfigured' as const };
+      try {
+        await api.deleteDraftDistribution(client, membership, id);
+        await refresh();
+        return { ok: true as const };
+      } catch (error) {
+        return { ok: false as const, failure: classifyDistributionError(error) };
+      }
+    },
+    [client, membership, refresh],
+  );
+
   /** Entitlement, what the lineage already settled, and the payout if any. */
   const loadSettlement = useCallback(
     async (id: string) => (client ? api.fetchSettlement(client, id) : null),
@@ -375,9 +409,9 @@ export function useDistributionHistory() {
   );
 
   return {
-    enabled, status, distributions, settlements, refresh, loadDetail, loadAckState,
-    loadQueries, resolveQuery, createReplacement, loadSupersededBy, send,
-    loadSettlement, loadMemberSettlement, recordPayout,
+    enabled, status, distributions, settlements, refresh, loadDetail, loadDetailResult,
+    loadAckState, loadQueries, resolveQuery, createReplacement, loadSupersededBy, send,
+    discardDraft, loadSettlement, loadMemberSettlement, recordPayout,
     loadPayoutEvents, reversePayout,
   };
 }

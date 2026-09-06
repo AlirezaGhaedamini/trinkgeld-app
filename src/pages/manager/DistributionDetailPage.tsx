@@ -64,6 +64,14 @@ export function DistributionDetailPage() {
   const [reversing, setReversing] = useState(false);
   const [revReason, setRevReason] = useState<ReversalReason>('recorded_by_mistake');
   const [revNote, setRevNote] = useState('');
+  /** Loading, found, not one of this workplace's, or the read failed. */
+  const [detailState, setDetailState] = useState<'loading' | 'ready' | 'missing' | 'error'>(
+    'loading',
+  );
+  /* A plain draft's two doors, each behind a sheet that says what happens. */
+  const [sending, setSending] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  const [acting, setActing] = useState<'send' | 'discard' | null>(null);
 
   /**
    * Read back, never recomputed.
@@ -75,8 +83,14 @@ export function DistributionDetailPage() {
   useEffect(() => {
     if (!real || !distributionId) return;
     let cancelled = false;
-    void history.loadDetail(distributionId).then((loaded) => {
-      if (!cancelled) setDetail(loaded);
+    void history.loadDetailResult(distributionId).then((result) => {
+      if (cancelled) return;
+      if (result.status === 'error') {
+        setDetailState('error');
+        return;
+      }
+      setDetail(result.detail);
+      setDetailState(result.detail ? 'ready' : 'missing');
     });
     void history.loadAckState(distributionId).then((rows) => {
       if (!cancelled) setAckRows(rows);
@@ -101,7 +115,7 @@ export function DistributionDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [real, distributionId, reload, history.loadDetail, history.loadAckState,
+  }, [real, distributionId, reload, history.loadDetailResult, history.loadAckState,
       history.loadQueries, history.loadSupersededBy, history.loadSettlement,
       history.loadMemberSettlement, history.loadPayoutEvents]);
 
@@ -124,9 +138,30 @@ export function DistributionDetailPage() {
 
   if (real) {
     if (!detail) {
+      /* Four absences, three of them named here: still loading, the read
+         failed, or the id is not one of this workplace's. None of them is
+         "no distributions yet". */
       return (
         <Screen title={t('distributions')}>
-          <EmptyState title={history.status === 'loading' ? t('dLoading') : t('emptyDistributions')} />
+          {detailState === 'error' ? (
+            <>
+              <EmptyState title={t('loadFailed')} />
+              <Button
+                variant="secondary"
+                block
+                onClick={() => {
+                  setDetailState('loading');
+                  setReload((n) => n + 1);
+                }}
+              >
+                {t('retry')}
+              </Button>
+            </>
+          ) : detailState === 'missing' ? (
+            <EmptyState title={t('dNotFoundTitle')}>{t('dNotFoundBody')}</EmptyState>
+          ) : (
+            <EmptyState title={t('dLoading')} />
+          )}
         </Screen>
       );
     }
@@ -240,6 +275,37 @@ export function DistributionDetailPage() {
       setRevNote('');
       show(t('revRecorded'));
       setReload((n) => n + 1);
+    };
+
+    /* The plain draft's two actions. Both refuse to start twice, both leave
+       the sheet open on failure so the toast has a screen to land on, and
+       both hand over to a screen that reads the authoritative record: the
+       sent confirmation, or the list the draft has left. */
+    const sendDraft = async () => {
+      if (acting !== null) return;
+      setActing('send');
+      const result = await history.send(dist.id);
+      setActing(null);
+      if (!result.ok) {
+        show(t(DISTRIBUTION_FAILURE_KEY[result.failure ?? 'unknown']));
+        return;
+      }
+      setSending(false);
+      navigate(`/manager/sent/${dist.id}`, { replace: true });
+    };
+
+    const discardDraft = async () => {
+      if (acting !== null) return;
+      setActing('discard');
+      const result = await history.discardDraft(dist.id);
+      setActing(null);
+      if (!result.ok) {
+        show(t(DISTRIBUTION_FAILURE_KEY[result.failure ?? 'unknown']));
+        return;
+      }
+      setDiscarding(false);
+      show(t('dDiscarded'));
+      navigate('/manager/distributions', { replace: true });
     };
 
     const answer = async (outcome: 'no_correction' | 'correction_required') => {
@@ -624,6 +690,22 @@ export function DistributionDetailPage() {
           </div>
         ) : null}
 
+        {/* A plain draft — the wizard's step 4 reached from the list instead
+            of from the wizard — must not be a dead end either. Send is the
+            same send_distribution() the wizard calls; discard removes the
+            never-sent draft under distributions_delete_draft and leaves the
+            pool ready to be calculated again. */}
+        {isDraft && !dist.supersedesId ? (
+          <div className={ui.stackTight}>
+            <Button disabled={acting !== null} onClick={() => setSending(true)}>
+              {t('dSendDraft')}
+            </Button>
+            <Button variant="ghost" disabled={acting !== null} onClick={() => setDiscarding(true)}>
+              {t('dDiscardDraft')}
+            </Button>
+          </div>
+        ) : null}
+
         {/* Questions first: they are the thing that needs a person, and burying
             them under the per-entry list would be the same dead end again. */}
         {queries.length > 0 ? (
@@ -774,6 +856,46 @@ export function DistributionDetailPage() {
             </Button>
             <Button variant="ghost" onClick={() => setCorrecting(false)}>
               {t('corrMgrCancel')}
+            </Button>
+          </div>
+        </Sheet>
+
+        {/* Sending a plain draft: one confirmation, then the same record the
+            wizard would have produced. The sheet closes only on success. */}
+        <Sheet
+          open={sending}
+          title={t('dSendDraft')}
+          onClose={() => {
+            if (acting === null) setSending(false);
+          }}
+        >
+          <div className={ui.stackTight}>
+            <Note>{t('dSendDraftBody')}</Note>
+            <Button disabled={acting !== null} onClick={() => void sendDraft()}>
+              {acting === 'send' ? t('dSending') : t('confirmSend')}
+            </Button>
+            <Button variant="ghost" disabled={acting !== null} onClick={() => setSending(false)}>
+              {t('back')}
+            </Button>
+          </div>
+        </Sheet>
+
+        {/* Discarding a plain draft. Nothing was sent, so nothing is taken
+            away from anyone; the pool stays, frozen at its amount. */}
+        <Sheet
+          open={discarding}
+          title={t('dDiscardDraft')}
+          onClose={() => {
+            if (acting === null) setDiscarding(false);
+          }}
+        >
+          <div className={ui.stackTight}>
+            <Note>{t('dDiscardDraftBody')}</Note>
+            <Button disabled={acting !== null} onClick={() => void discardDraft()}>
+              {acting === 'discard' ? t('dDiscarding') : t('dDiscardDraft')}
+            </Button>
+            <Button variant="ghost" disabled={acting !== null} onClick={() => setDiscarding(false)}>
+              {t('back')}
             </Button>
           </div>
         </Sheet>

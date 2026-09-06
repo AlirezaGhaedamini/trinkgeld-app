@@ -192,26 +192,26 @@ export function WizardResultPage() {
             />
           ))}
 
-      <CardButton padding="padded" onClick={() => navigate('/manager/overlap')}>
-        <span className={ui.inline}>
-          <Icon name="users-four" size={18} color="var(--color-accent)" />
-          <span className={ui.rowMain}>
-            <span style={{ fontSize: 14 }}>{t('seeOverlap')}</span>
-            <span className={ui.rowMeta} style={{ display: 'block' }}>
-              {real
-                ? `${headcount} ${t('people')} · ${
-                    detail?.distribution.minOverlapMinutes ?? 0
-                  } ${t('minutesShort')}`
-                : excluded
+      {/* The overlap screen reads the demo dataset; a real manager is not
+          sent into it. The real overlap terms are on the record itself. */}
+      {real ? null : (
+        <CardButton padding="padded" onClick={() => navigate('/manager/overlap')}>
+          <span className={ui.inline}>
+            <Icon name="users-four" size={18} color="var(--color-accent)" />
+            <span className={ui.rowMain}>
+              <span style={{ fontSize: 14 }}>{t('seeOverlap')}</span>
+              <span className={ui.rowMeta} style={{ display: 'block' }}>
+                {excluded
                   ? `${excluded} ${t('excludedCount')}`
                   : `${grouping.rows.length} ${t('people')} · ${state.rule.minOverlapMinutes} ${t(
                       'minutesShort',
                     )}`}
+              </span>
             </span>
+            <Icon name="caret-right" size={13} color="var(--color-text-subtle)" />
           </span>
-          <Icon name="caret-right" size={13} color="var(--color-text-subtle)" />
-        </span>
-      </CardButton>
+        </CardButton>
+      )}
 
       <Note>
         {real && detail

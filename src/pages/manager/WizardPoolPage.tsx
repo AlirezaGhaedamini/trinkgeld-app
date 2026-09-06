@@ -167,7 +167,17 @@ export function WizardPoolPage() {
           a derived total is the database's to state, and a locked pool's
           amounts are frozen by app.guard_pool_amounts(). */}
       {real && (derived || poolLocked) ? (
-        <p className={ui.note}>{poolLocked ? t('dPreviewBody') : t('dPoolFromReports')}</p>
+        /* A locked pool says what it is locked at and that the total stays:
+           app.guard_pool_amounts() freezes it, no RPC reopens it, and a
+           replacement reuses it. Truthful beats a generic "check the numbers". */
+        <p className={ui.note}>
+          {poolLocked
+            ? t('dPoolLockedNote').replace(
+                '{amount}',
+                money(centsToAmount(wizard.pool?.totalCents ?? 0)),
+              )
+            : t('dPoolFromReports')}
+        </p>
       ) : (
         <MoneyKeypad
           label={t('totalCollected')}

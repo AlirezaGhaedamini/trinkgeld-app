@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { BandBar } from '@/components/ui/BandBar';
+import { Button } from '@/components/ui/Button';
 import { CardButton } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -72,6 +73,18 @@ export function DistributionsPage() {
           onChange={(next) => setParams(next === 'all' ? {} : { filter: next })}
         />
 
+        {/* A failed read is not an empty history. */}
+        {history.status === 'error' ? (
+          <>
+            <EmptyState title={t('loadFailed')} />
+            <Button variant="secondary" block onClick={() => void history.refresh()}>
+              {t('retry')}
+            </Button>
+          </>
+        ) : history.status !== 'ready' ? (
+          <EmptyState title={t('dLoading')} />
+        ) : null}
+
         {realRows.map(({ distribution, row }) =>
           row ? (
             <CardButton
@@ -120,7 +133,7 @@ export function DistributionsPage() {
           ) : null,
         )}
 
-        {realRows.length === 0 ? (
+        {history.status === 'ready' && realRows.length === 0 ? (
           <EmptyState title={t('dNoDistributions')}>{t('dNoDistributionsBody')}</EmptyState>
         ) : null}
       </Screen>

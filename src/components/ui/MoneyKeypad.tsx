@@ -17,8 +17,7 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'delete
  * reads €2,480.00 — the same behaviour as a till.
  */
 export function MoneyKeypad({ cents, onChange, label }: MoneyKeypadProps) {
-  const { language } = useI18n();
-  const german = language === 'Deutsch';
+  const { t } = useI18n();
 
   return (
     <div className={styles.keypad} role="group" aria-label={label}>
@@ -30,7 +29,7 @@ export function MoneyKeypad({ cents, onChange, label }: MoneyKeypadProps) {
               type="button"
               className={`${styles.key} ${styles.keyUtility}`}
               onClick={() => onChange(0)}
-              aria-label={german ? 'Zurücksetzen' : 'Clear'}
+              aria-label={t('kpClear')}
             >
               <Icon name="arrow-counter-clockwise" size={20} />
             </button>
@@ -43,7 +42,7 @@ export function MoneyKeypad({ cents, onChange, label }: MoneyKeypadProps) {
               type="button"
               className={`${styles.key} ${styles.keyUtility}`}
               onClick={() => onChange(popDigit(cents))}
-              aria-label={german ? 'Löschen' : 'Delete'}
+              aria-label={t('kpDelete')}
             >
               <Icon name="backspace" size={20} />
             </button>

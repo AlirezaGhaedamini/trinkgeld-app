@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { DICTIONARIES, type StringKey } from '@/i18n/strings';
 import { I18nContext, type I18nValue } from '@/i18n/context';
 import type { AreaId, Language } from '@/types';
@@ -60,6 +60,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       /* non-fatal: the choice just will not survive a reload */
     }
   }, []);
+
+  // The document speaks the app's language: index.html can only declare one,
+  // and screen readers, hyphenation and spell-checking all read this attribute.
+  useEffect(() => {
+    document.documentElement.lang = language === 'Deutsch' ? 'de' : 'en';
+  }, [language]);
 
   const value = useMemo<I18nValue>(() => {
     const dict = DICTIONARIES[language];

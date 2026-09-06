@@ -23,10 +23,10 @@ interface RealAreaResultBlockProps {
  * tip_distribution_entries exactly as the engine wrote them.
  */
 export function RealAreaResultBlock({ area, entries, method, onOpenEntry }: RealAreaResultBlockProps) {
-  const { t, money, num, percent, hours, language } = useI18n();
+  const { t, money, num, percent, hours } = useI18n();
 
   const mathFor = (entry: DistributionEntry) => {
-    if (method === 'equal') return language === 'Deutsch' ? 'gleicher Anteil' : 'equal share';
+    if (method === 'equal') return t('mathEqualShare');
     if (method === 'hours') return hours(entry.workedMinutes / 60);
     return `${hours(entry.workedMinutes / 60)} × ${num(entry.points * entry.multiplier, 1)} = ${num(
       entry.units,

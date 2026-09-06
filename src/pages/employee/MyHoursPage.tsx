@@ -83,8 +83,11 @@ export function MyHoursPage() {
   const locked = real ? Boolean(existing?.locked) : Boolean(submission?.locked);
   const reviewed = real && existing?.status === 'approved';
 
-  const [draft, setDraft] = useState<HoursDraft>(
-    submission
+  // Real mode starts empty and is seeded from the filed shift by the effect
+  // below; the reducer's submission is demo state and must not paint even for
+  // one frame under a real account.
+  const [draft, setDraft] = useState<HoursDraft>(() =>
+    !real && submission
       ? {
           startMinutes: submission.startMinutes,
           endMinutes: submission.endMinutes,
@@ -239,10 +242,13 @@ export function MyHoursPage() {
     real
       ? locked
         ? {
+            // A locked shift that was sent back is both things at once, and
+            // the note still explains what to fix once the manager unlocks it.
             icon: 'lock-simple',
             color: 'var(--color-text-secondary)',
-            title: t('hoursLocked'),
+            title: existing?.status === 'rejected' ? t('shRejectedLocked') : t('hoursLocked'),
             body: t('hoursLockedBody'),
+            note: existing?.status === 'rejected' ? existing.reviewNote : null,
           }
         : !existing
           ? {

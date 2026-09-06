@@ -115,9 +115,16 @@ function RealHome() {
           <HeroCard
             kicker={t('hmLatestShare')}
             amount={money(ownCents / 100)}
-            meta={`${day(new Date(`${latest.periodStart}T12:00:00`))} · ${t(
-              PAYOUT_STATE_LABEL[latest.payoutStatus],
-            )}`}
+            // A correction settled against an earlier version has its own
+            // payout story — money may already have changed hands on the
+            // basis it replaces. "Not paid yet" for this id alone would be
+            // misleading, so the kicker names the situation and the payout
+            // screen explains the settlement.
+            meta={`${day(new Date(`${latest.periodStart}T12:00:00`))} · ${
+              latest.settledBasisId
+                ? t('corrCorrected')
+                : t(PAYOUT_STATE_LABEL[latest.payoutStatus])
+            }`}
             pill={
               <>
                 <Icon

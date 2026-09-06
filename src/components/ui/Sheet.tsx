@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useI18n } from '@/hooks/useI18n';
 import styles from '@/components/ui/ui.module.css';
 
 interface SheetProps {
@@ -14,6 +15,7 @@ interface SheetProps {
  */
 export function Sheet({ open, title, onClose, children }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!open) return;
@@ -29,7 +31,7 @@ export function Sheet({ open, title, onClose, children }: SheetProps) {
 
   return (
     <>
-      <button type="button" className={styles.scrim} aria-label="Close" onClick={onClose} />
+      <button type="button" className={styles.scrim} aria-label={t('close')} onClick={onClose} />
       <div
         ref={panelRef}
         className={styles.sheet}

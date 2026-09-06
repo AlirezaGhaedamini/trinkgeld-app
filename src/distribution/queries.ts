@@ -306,6 +306,39 @@ export async function cancelDistribution(
   if (error) throw error;
 }
 
+/**
+ * Removes a draft that was never sent.
+ *
+ * Not an RPC, and not an invention: `distributions_delete_draft` (migration
+ * 10) lets a manager delete a draft of their own workplace and nothing else,
+ * and calculate_distribution() itself deletes the pool's draft before every
+ * recalculation. Entry and area rows cascade; the pool keeps its status and
+ * its frozen amounts, so the wizard can calculate it again; the audit log
+ * records the delete. The status filter here repeats what the policy already
+ * enforces, and a delete that matched nothing is reported as a failure
+ * rather than a silent success.
+ *
+ * Cancelling was the alternative and is deliberately not used for drafts:
+ * `app.distribution_is_published()` counts a cancelled row as published, so
+ * a draft nobody was ever meant to see would surface for the whole team as a
+ * cancelled payout, amounts and all.
+ */
+export async function deleteDraftDistribution(
+  client: TipCrewClient,
+  membership: Membership,
+  distributionId: string,
+): Promise<void> {
+  const { data, error } = await client
+    .from('tip_distributions')
+    .delete()
+    .eq('id', distributionId)
+    .eq('workplace_id', membership.workplaceId)
+    .eq('status', 'draft')
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('draft not found');
+}
+
 /* ── reading distributions back ──────────────────────────────────────────── */
 
 export async function fetchDistributions(

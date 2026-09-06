@@ -40,7 +40,7 @@ const CODE_LENGTH = 6;
 export function JoinWorkplacePage() {
   const { session, workplace: localWorkplace, dataMode } = useAppState();
   const dispatch = useAppDispatch();
-  const { t, language } = useI18n();
+  const { t } = useI18n();
   const { show } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,7 +48,6 @@ export function JoinWorkplacePage() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const code = session.joinCode;
-  const german = language === 'Deutsch';
   const demo = dataMode === 'demo';
   const real = workplace.enabled;
   const complete = code.length === CODE_LENGTH;
@@ -98,15 +97,15 @@ export function JoinWorkplacePage() {
         show(t(WORKPLACE_FAILURE_KEY[result.failure ?? 'invalidInvite']));
         return;
       }
-      show(german ? 'Willkommen im Team' : 'Welcome to the team');
+      show(t('wpWelcome'));
       navigate('/', { replace: true });
     });
-  }, [real, workplace, location.search, show, t, german, navigate]);
+  }, [real, workplace, location.search, show, t, navigate]);
 
   const submitCode = async () => {
     if (!real) {
       dispatch({ type: 'signIn', role: 'employee' });
-      show(german ? 'Willkommen im Team' : 'Welcome to the team');
+      show(t('wpWelcome'));
       navigate('/home', { replace: true });
       return;
     }
@@ -125,7 +124,7 @@ export function JoinWorkplacePage() {
   const submitCreate = async () => {
     if (!real) {
       dispatch({ type: 'signIn', role: 'manager' });
-      show(german ? 'Betrieb erstellt' : 'Workplace created');
+      show(t('wpCreated'));
       navigate('/manager', { replace: true });
       return;
     }
@@ -135,7 +134,7 @@ export function JoinWorkplacePage() {
       fail(result.failure ?? 'createFailed');
       return;
     }
-    show(german ? 'Betrieb erstellt' : 'Workplace created');
+    show(t('wpCreated'));
     navigate('/manager', { replace: true });
   };
 

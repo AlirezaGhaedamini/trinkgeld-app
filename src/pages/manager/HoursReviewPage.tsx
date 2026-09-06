@@ -185,7 +185,9 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
       title={wizard ? t('hoursWorked') : t('hoursReviewTitle')}
       kicker={wizard ? `${t('step')} 3/4` : shift.full}
       action={
-        wizard
+        // The overlap screen is the demo dataset's; a real manager is not
+        // sent into it. The real overlap verdict is on each row's badge.
+        wizard || realReview
           ? undefined
           : { icon: 'users-four', onClick: () => navigate('/manager/overlap') }
       }

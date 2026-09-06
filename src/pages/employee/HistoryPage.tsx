@@ -28,7 +28,8 @@ export function HistoryPage() {
  * next to its replacement and a cancelled distribution next to its money — the
  * sum would be wrong on exactly the nights that matter most. Each row carries
  * its own amount and its own state, and that is the record. The count in the
- * section label is of current distributions only, for the same reason.
+ * section label is of nights, so it describes the list whatever happened to
+ * the versions in it.
  */
 function RealHistory() {
   const i18n = useI18n();
@@ -36,9 +37,9 @@ function RealHistory() {
   const navigate = useNavigate();
   const mine = useMyShare();
   const rows = rowsForMyShare(mine, i18n, navigate);
-  const currentCount = mine.distributions.filter(
-    (d) => !d.supersededBy && d.status !== 'cancelled',
-  ).length;
+  // Nights, not rows: a night that was corrected twice is still one night,
+  // and a night whose only versions were replaced is still a night worked.
+  const nightCount = new Set(mine.distributions.map((d) => d.periodStart)).size;
 
   return (
     <Screen title={t('history')} titleSize={26} back={false} aboveTabs>
@@ -55,7 +56,7 @@ function RealHistory() {
         <EmptyState title={t('emptyHistory')}>{t('emptyShiftsBody')}</EmptyState>
       ) : (
         <div className={ui.stackFlush}>
-          <SectionLabel meta={t('dbNightsN').replace('{n}', String(currentCount))}>
+          <SectionLabel meta={t('dbNightsN').replace('{n}', String(nightCount))}>
             {t('hsShares')}
           </SectionLabel>
           {rows.map((row) => (

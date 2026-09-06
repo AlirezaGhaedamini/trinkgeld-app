@@ -78,7 +78,9 @@ function RealSent({ id, detail }: { id: string; detail: ReturnType<typeof useDis
             </Button>
           </>
         ) : detail.status === 'ready' ? (
-          <p className={styles.sentBody}>{t('emptyDistributions')}</p>
+          /* The id in the route is not one of this workplace's: say so, and
+             do not dress it up as an empty history. */
+          <p className={styles.sentBody}>{`${t('dNotFoundTitle')} ${t('dNotFoundBody')}`}</p>
         ) : (
           <p className={styles.sentBody}>{t('dLoading')}</p>
         )}
