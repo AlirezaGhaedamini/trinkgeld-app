@@ -440,7 +440,12 @@ export function useDistributionDetail(distributionId: string | null | undefined)
 export function useMyShare() {
   const client = useClient();
   const workplace = useWorkplace();
-  const enabled = Boolean(client) && workplace.enabled && workplace.activeMembership !== null;
+  const membership = workplace.activeMembership;
+  // The workplace, not the membership object: the provider hands out a fresh
+  // object whenever it re-reads memberships, and that must not throw away and
+  // re-fetch the same workplace's rows. A different workplace id must.
+  const workplaceId = membership?.workplaceId ?? null;
+  const enabled = Boolean(client) && workplace.enabled && workplaceId !== null;
 
   const [status, setStatus] = useState<LoadStatus>('idle');
   const [distributions, setDistributions] = useState<Distribution[]>([]);
@@ -449,6 +454,12 @@ export function useMyShare() {
   const [queries, setQueries] = useState<MyQuery[]>([]);
   const [busy, setBusy] = useState(false);
   const alive = useRef(true);
+  /**
+   * Which request is the current one. Switching workplace while a load is in
+   * flight would otherwise let the old workplace's answer land on top of the
+   * new one's; the same guard `useOwnShifts` uses.
+   */
+  const token = useRef(0);
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -457,12 +468,14 @@ export function useMyShare() {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!client) return;
+    if (!client || !workplaceId) return;
+    const mine = (token.current += 1);
+    const scope = { workplaceId };
     setStatus((s) => (s === 'ready' ? s : 'loading'));
     try {
-      const [dists, rows, mine] = await Promise.all([
-        api.fetchMyDistributions(client),
-        api.fetchMyEntries(client),
+      const [dists, rows, own] = await Promise.all([
+        api.fetchMyDistributions(client, scope),
+        api.fetchMyEntries(client, scope),
         api.fetchMyQueries(client),
       ]);
       // Area subtotals only when the workplace released the pool; an empty
@@ -473,26 +486,29 @@ export function useMyShare() {
           byDistribution[dist.id] = await api.fetchVisibleAreas(client, dist.id);
         }),
       );
-      if (!alive.current) return;
+      if (!alive.current || mine !== token.current) return;
       setDistributions(dists);
       setEntries(rows);
-      setQueries(mine);
+      setQueries(own);
       setAreas(byDistribution);
       setStatus('ready');
     } catch {
-      if (alive.current) setStatus('error');
+      if (!alive.current || mine !== token.current) return;
+      setStatus('error');
     }
-  }, [client]);
+  }, [client, workplaceId]);
 
   useEffect(() => {
-    if (!enabled) {
-      setDistributions([]);
-      setEntries([]);
-      setQueries([]);
-      setAreas({});
-      setStatus('idle');
-      return;
-    }
+    // Every change of workplace (or of the gate) starts from nothing: the
+    // previous workplace's rows go at once, and its in-flight answer is
+    // retired by bumping the token before the new load takes the next one.
+    token.current += 1;
+    setDistributions([]);
+    setEntries([]);
+    setQueries([]);
+    setAreas({});
+    setStatus('idle');
+    if (!enabled) return;
     void refresh();
   }, [enabled, refresh]);
 

@@ -384,21 +384,36 @@ export async function fetchPoolDistribution(
  * employees have no policy on `tip_distributions` at all, and the view masks
  * the pool total unless the workplace has released it.
  */
-export async function fetchMyDistributions(client: TipCrewClient): Promise<Distribution[]> {
+export async function fetchMyDistributions(
+  client: TipCrewClient,
+  membership: Pick<Membership, 'workplaceId'>,
+): Promise<Distribution[]> {
   const { data, error } = await client
     .from('member_distributions')
     .select('*')
+    // The view returns every workplace the caller has an entry in. That is
+    // the security boundary; this is the screen's: the active workplace only,
+    // so somebody who works in two places never sees one place's money under
+    // the other's name.
+    .eq('workplace_id', membership.workplaceId)
+    // Newest business day first, and within one day the version that was
+    // actually published last — so "the latest" is the same answer every time.
     .order('period_start', { ascending: false })
+    .order('sent_at', { ascending: false, nullsFirst: false })
     .limit(50);
   if (error) throw error;
   return (data ?? []).map(toMemberDistribution);
 }
 
 /** The member's own entries. Peer rows are filtered out by RLS, not by this code. */
-export async function fetchMyEntries(client: TipCrewClient): Promise<DistributionEntry[]> {
+export async function fetchMyEntries(
+  client: TipCrewClient,
+  membership: Pick<Membership, 'workplaceId'>,
+): Promise<DistributionEntry[]> {
   const { data, error } = await client
     .from('member_distribution_entries')
     .select('*')
+    .eq('workplace_id', membership.workplaceId)
     .limit(200);
   if (error) throw error;
   return (data ?? []).map((row) => ({

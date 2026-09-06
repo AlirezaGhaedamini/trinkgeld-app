@@ -5,10 +5,19 @@
  */
 
 import type { Enums, Tables } from '@/types/database';
+import type { StringKey } from '@/i18n/strings';
 import { instantToWallMinutes } from '@/shifts/time';
 
 export type ShiftStatus = Enums<'shift_status'>;
 export type ShiftSource = Enums<'shift_source'>;
+
+/** The database's own enum, spelled the way a person reads it. */
+export const SHIFT_STATUS_LABEL: Record<ShiftStatus, StringKey> = {
+  draft: 'shStatusDraft',
+  submitted: 'shStatusSubmitted',
+  approved: 'shStatusApproved',
+  rejected: 'shStatusRejected',
+};
 
 export interface Shift {
   id: string;

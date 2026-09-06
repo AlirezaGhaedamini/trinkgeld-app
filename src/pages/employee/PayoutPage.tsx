@@ -36,7 +36,7 @@ export function PayoutPage() {
   const [note, setNote] = useState('');
   const state = useAppState();
   const dispatch = useAppDispatch();
-  const { t, money, num, percent, hours, area, dateFor, day, language } = useI18n();
+  const { t, money, num, percent, hours, area, dateFor, day } = useI18n();
   const { show } = useToast();
   const navigate = useNavigate();
   const { distributionId } = useParams();
@@ -50,16 +50,29 @@ export function PayoutPage() {
      is recalculated against today's rules, which is why an old payout still
      explains itself after the rules change. */
   if (real) {
-    /* Without an id this screen shows the current share, which is the newest
-       distribution that has not been replaced — never a superseded one. With an
-       id it shows exactly what was asked for, so an older version stays
-       reachable from history. */
-    const current = mine.distributions.find((d) => !d.supersededBy) ?? mine.distributions[0];
-    const realDistribution =
-      (distributionId ? mine.distributions.find((d) => d.id === distributionId) : undefined) ??
-      current;
+    /* The route names the distribution, and only that one is shown. Without an
+       id — every link in the app passes one — the screen falls back to the
+       current share: the newest distribution that has not been replaced or
+       cancelled. With an id that is not among the person's own records (another
+       workplace, a draft, a link meant for somebody else) the screen says so.
+       It never quietly substitutes another night's money for the one asked
+       for: a person tapping "see how it was calculated" on €41 must not be
+       shown the arithmetic behind €58. */
+    const realDistribution = distributionId
+      ? (mine.distributions.find((d) => d.id === distributionId) ?? null)
+      : (mine.distributions.find((d) => !d.supersededBy && d.status !== 'cancelled') ?? null);
 
-    if (mine.status === 'loading') {
+    if (mine.status === 'error') {
+      return (
+        <Screen title={t('yourShare')}>
+          <EmptyState title={t('loadFailed')} />
+          <Button variant="secondary" block onClick={() => void mine.refresh()}>
+            {t('retry')}
+          </Button>
+        </Screen>
+      );
+    }
+    if (mine.status !== 'ready') {
       return (
         <Screen title={t('yourShare')}>
           <EmptyState title={t('dLoading')} />
@@ -69,7 +82,11 @@ export function PayoutPage() {
     if (!realDistribution) {
       return (
         <Screen title={t('yourShare')}>
-          <EmptyState title={t('emptyShifts')}>{t('emptyShiftsBody')}</EmptyState>
+          {distributionId ? (
+            <EmptyState title={t('poNotFoundTitle')}>{t('poNotFoundBody')}</EmptyState>
+          ) : (
+            <EmptyState title={t('emptyShifts')}>{t('emptyShiftsBody')}</EmptyState>
+          )}
         </Screen>
       );
     }
@@ -139,7 +156,7 @@ export function PayoutPage() {
         step: `${t('step')} ${steps.length + 1}`,
         label: t('cShiftPool'),
         value: money(realDistribution.poolCents / 100),
-        math: language === 'Deutsch' ? 'Karte + Bar' : 'card + cash',
+        math: t('poCardPlusCash'),
         dot: 'var(--color-warning)',
         glow: 'none',
       });
@@ -492,7 +509,7 @@ export function PayoutPage() {
             step: `${t('step')} 1`,
             label: t('cShiftPool'),
             value: money(distribution.poolAmount),
-            math: language === 'Deutsch' ? 'Karte + Bar' : 'card + cash',
+            math: t('poCardPlusCash'),
             dot: 'var(--color-warning)',
             glow: 'none',
           },

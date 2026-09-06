@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Icon } from '@/components/ui/Icon';
+import { Icon, type IconName } from '@/components/ui/Icon';
 import { Lede } from '@/components/ui/Note';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SectionLabel } from '@/components/ui/SectionLabel';
@@ -15,7 +16,7 @@ import { useToast } from '@/hooks/useToast';
 import { formatClock, workedMinutes } from '@/lib/time';
 import { SHIFT_FAILURE_KEY } from '@/shifts/errors';
 import { addDays } from '@/shifts/time';
-import { validateDraft, type Shift, type ShiftStatus } from '@/shifts/types';
+import { SHIFT_STATUS_LABEL, validateDraft, type Shift } from '@/shifts/types';
 import { useOwnShifts } from '@/shifts/useShifts';
 import type { ShiftTimes } from '@/types';
 import type { StringKey } from '@/i18n/strings';
@@ -42,14 +43,6 @@ const MAX_BREAK_MINUTES = 180;
  * a sensible place to begin counting, so nobody taps + eighty times.
  */
 const FIRST_TOUCH = { start: 18 * 60, end: 22 * 60, break: 0 };
-
-/** The database's own enum, spelled the way a person reads it. */
-const STATUS_KEY: Record<ShiftStatus, StringKey> = {
-  draft: 'shStatusDraft',
-  submitted: 'shStatusSubmitted',
-  approved: 'shStatusApproved',
-  rejected: 'shStatusRejected',
-};
 
 /**
  * The employee enters their own working time here: start, end, break. The app
@@ -200,11 +193,16 @@ export function MyHoursPage() {
     ? api.shifts.slice(0, 6).map((entry) => ({
         id: entry.id,
         date: day(new Date(`${entry.workDate}T12:00:00`)),
+        // The status the database stores, a lock if the manager set one, and
+        // the manager's note when the shift was sent back — so a night older
+        // than the two the form can open still explains itself here.
         meta: `${formatClock(entry.startMinutes)} – ${formatClock(entry.endMinutes)} · ${t(
           'breakT',
-        )} ${entry.breakMinutes} ${t('minutesShort')} · ${t(STATUS_KEY[entry.status])}`,
+        )} ${entry.breakMinutes} ${t('minutesShort')} · ${t(SHIFT_STATUS_LABEL[entry.status])}${
+          entry.locked ? ` · ${t('shLockedShort')}` : ''
+        }${entry.status === 'rejected' && entry.reviewNote ? ` · ${entry.reviewNote}` : ''}`,
         hours: num(entry.workedMinutes / 60, 2),
-        status: t(STATUS_KEY[entry.status]),
+        status: t(SHIFT_STATUS_LABEL[entry.status]),
         statusColor:
           entry.status === 'approved'
             ? 'var(--color-money)'
@@ -227,6 +225,73 @@ export function MyHoursPage() {
           statusColor: undefined as string | undefined,
         };
       });
+
+  /**
+   * What the banner says about the selected night.
+   *
+   * Real mode reads the shift's stored status and, when the manager sent it
+   * back, the note they wrote — the one piece of the review an employee is
+   * meant to act on. The lock wins over everything else because it is the
+   * state that decides whether the form above can be used at all. Demo mode
+   * keeps its Phase 1 wording exactly.
+   */
+  const banner: { icon: IconName; color: string; title: string; body: string; note?: string | null } =
+    real
+      ? locked
+        ? {
+            icon: 'lock-simple',
+            color: 'var(--color-text-secondary)',
+            title: t('hoursLocked'),
+            body: t('hoursLockedBody'),
+          }
+        : !existing
+          ? {
+              icon: 'paper-plane-tilt',
+              color: 'var(--color-accent)',
+              title: t('notSubmitted'),
+              body: t('myHoursBody'),
+            }
+          : existing.status === 'rejected'
+            ? {
+                icon: 'warning-circle',
+                color: 'var(--color-accent)',
+                title: t('shRejectedTitle'),
+                body: t('shRejectedBody'),
+                note: existing.reviewNote,
+              }
+            : existing.status === 'approved'
+              ? {
+                  icon: 'check-circle',
+                  color: 'var(--color-money)',
+                  title: t('shStatusApproved'),
+                  body: t('shApprovedBody'),
+                }
+              : existing.status === 'submitted'
+                ? {
+                    icon: 'clock',
+                    color: 'var(--color-accent)',
+                    title: t('shStatusSubmitted'),
+                    body: t('shSubmittedBody'),
+                  }
+                : {
+                    icon: 'paper-plane-tilt',
+                    color: 'var(--color-accent)',
+                    title: t('shStatusDraft'),
+                    body: t('myHoursBody'),
+                  }
+      : locked
+        ? {
+            icon: 'lock-simple',
+            color: 'var(--color-text-secondary)',
+            title: t('hoursLocked'),
+            body: t('hoursLockedBody'),
+          }
+        : {
+            icon: submission ? 'lock-simple-open' : 'paper-plane-tilt',
+            color: 'var(--color-accent)',
+            title: submission ? t('hoursUnlocked') : t('notSubmitted'),
+            body: t('myHoursBody'),
+          };
 
   /** Send the shift. Validation first, so a round trip is not wasted on 24:00. */
   const sendShift = async () => {
@@ -273,9 +338,17 @@ export function MyHoursPage() {
       back={false}
       aboveTabs
       cta={
-        locked || reviewed
-          ? { label: t('requestChange'), onClick: () => show(t('changeRequested')) }
-          : {
+        /* A locked or approved shift is the manager's to change. Real mode
+           offers no button for it — there is no request-a-change workflow in
+           the backend, and a toast pretending otherwise would be a lie. The
+           banner below says who to talk to. A rejected shift keeps the button:
+           correcting it and submitting again is the existing policy, and the
+           label says "Update" because a row already exists. */
+        real && (locked || reviewed)
+          ? undefined
+          : locked || reviewed
+            ? { label: t('requestChange'), onClick: () => show(t('changeRequested')) }
+            : {
               label: api.busy
                 ? t('shSaving')
                 : (real ? existing : submission)
@@ -399,32 +472,17 @@ export function MyHoursPage() {
 
       <Card padding="padded">
         <div className={styles.lockedBanner}>
-          <Icon
-            name={locked ? 'lock-simple' : submission ? 'lock-simple-open' : 'paper-plane-tilt'}
-            size={19}
-            color={locked ? 'var(--color-text-secondary)' : 'var(--color-accent)'}
-          />
+          <Icon name={banner.icon} size={19} color={banner.color} />
           <div className={ui.rowMain}>
-            <p
-              style={{
-                fontSize: 14,
-                fontWeight: 500,
-                color: locked ? 'var(--color-text-secondary)' : 'var(--color-accent)',
-              }}
-            >
-              {locked
-                ? t('hoursLocked')
-                : real
-                  ? existing
-                    ? t(STATUS_KEY[existing.status])
-                    : t('notSubmitted')
-                  : submission
-                    ? t('hoursUnlocked')
-                    : t('notSubmitted')}
-            </p>
+            <p style={{ fontSize: 14, fontWeight: 500, color: banner.color }}>{banner.title}</p>
             <p className={ui.note} style={{ marginTop: 2 }}>
-              {locked ? t('hoursLockedBody') : t('myHoursBody')}
+              {banner.body}
             </p>
+            {banner.note ? (
+              <p className={ui.note} style={{ marginTop: 6, color: 'var(--color-text)' }}>
+                {`${t('shNoteLabel')}: ${banner.note}`}
+              </p>
+            ) : null}
           </div>
         </div>
       </Card>
@@ -432,7 +490,15 @@ export function MyHoursPage() {
       <div className={ui.stackFlush}>
         <SectionLabel>{t('recent')}</SectionLabel>
         {real && api.status === 'loading' ? <EmptyState title={t('shLoading')} /> : null}
-        {log.length === 0 && !(real && api.status === 'loading') ? (
+        {real && api.status === 'error' ? (
+          <>
+            <EmptyState title={t('loadFailed')} />
+            <Button variant="secondary" block onClick={() => void api.refresh()}>
+              {t('retry')}
+            </Button>
+          </>
+        ) : null}
+        {log.length === 0 && !(real && (api.status === 'loading' || api.status === 'error')) ? (
           <EmptyState title={t('emptyShifts')} />
         ) : null}
         {log.map((entry) => (

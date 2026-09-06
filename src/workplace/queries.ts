@@ -71,6 +71,43 @@ export async function fetchMemberships(
     .sort((a, b) => a.workplace.name.localeCompare(b.workplace.name));
 }
 
+/**
+ * The names behind a membership's default area and role, for the person's
+ * own screens.
+ *
+ * Members may read their workplace's areas and roles (`areas_select_member`,
+ * `roles_select_member`), so this is two single-row reads and never a config
+ * screen's worth of rows. An archived row still answers: somebody left in an
+ * archived area should see its name, not a blank.
+ */
+export async function fetchAssignmentNames(
+  client: TipCrewClient,
+  membership: Membership,
+): Promise<{ areaName: string | null; roleName: string | null }> {
+  let areaName: string | null = null;
+  let roleName: string | null = null;
+
+  if (membership.areaId) {
+    const { data, error } = await client
+      .from('workplace_areas')
+      .select('id, name')
+      .eq('id', membership.areaId)
+      .maybeSingle();
+    if (error) throw error;
+    areaName = data?.name ?? null;
+  }
+  if (membership.workplaceRoleId) {
+    const { data, error } = await client
+      .from('workplace_roles')
+      .select('id, name')
+      .eq('id', membership.workplaceRoleId)
+      .maybeSingle();
+    if (error) throw error;
+    roleName = data?.name ?? null;
+  }
+  return { areaName, roleName };
+}
+
 /** Create a workplace and its manager membership atomically. Returns the id. */
 export async function createWorkplaceRpc(
   client: TipCrewClient,

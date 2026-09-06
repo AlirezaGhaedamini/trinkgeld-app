@@ -1,11 +1,55 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, type NavigateFunction } from 'react-router-dom';
 import type { HistoryRowData } from '@/components/domain/HistoryRow';
 import { shareOf } from '@/state/selectors';
 import { useAppState } from '@/hooks/useAppState';
 import { useI18n } from '@/hooks/useI18n';
 import { useActiveRole } from '@/hooks/useWorkplace';
+import type { I18nValue } from '@/i18n/context';
 import { ACK_VIEW, ackViewFor } from '@/distribution/ack';
 import { useDistributionHistory, useMyShare } from '@/distribution/useDistribution';
+
+/**
+ * The employee's rows, from the share hook's records.
+ *
+ * Every row is read from a stored distribution — member_distributions and the
+ * person's own entries. Nothing is recomputed, so a row means the same thing
+ * today as on the night it was sent. Exported on its own so a screen that
+ * already holds the share hook (Home, History) can build the same rows
+ * without mounting the hook a second time.
+ */
+export function rowsForMyShare(
+  mine: ReturnType<typeof useMyShare>,
+  { t, money, hours, day }: Pick<I18nValue, 't' | 'money' | 'hours' | 'day'>,
+  navigate: NavigateFunction,
+): HistoryRowData[] {
+  return mine.distributions.map((distribution) => {
+    const own = mine.entries.filter(
+      (e) => e.distributionId === distribution.id && e.isOwn !== false,
+    );
+    const amountCents = own.reduce((sum, e) => sum + e.amountCents, 0);
+    const minutes = own.reduce((sum, e) => sum + e.workedMinutes, 0);
+    // Three states, not two: a distribution sent when confirmation was not
+    // required is not "waiting", and never was.
+    const view = ackViewFor(own, distribution.acknowledgementRequired);
+    const presentation = ACK_VIEW[view];
+    // A replaced payout is history: it says so instead of asking for a
+    // confirmation nobody can give any more.
+    const replaced = Boolean(distribution.supersededBy);
+    return {
+      id: distribution.id,
+      date: day(new Date(`${distribution.periodStart}T12:00:00`)),
+      meta: `${own[0]?.areaName ?? ''} · ${hours(minutes / 60)}`.replace(/^ · /, ''),
+      amount: money(amountCents / 100),
+      status: replaced ? t('corrReplaced') : t(presentation.label),
+      statusColor:
+        replaced || presentation.tone === 'subtle'
+          ? 'var(--color-text-subtle)'
+          : 'var(--color-accent)',
+      chip: undefined,
+      onOpen: () => navigate(`/payout/${distribution.id}`),
+    };
+  });
+}
 
 /**
  * The list of past distributions, rendered from the point of view of whoever is
@@ -14,7 +58,8 @@ import { useDistributionHistory, useMyShare } from '@/distribution/useDistributi
  */
 export function useDistributionRows(options: { chips?: boolean } = {}): HistoryRowData[] {
   const state = useAppState();
-  const { t, money, hours, people, dateFor, chipFor, area, day } = useI18n();
+  const i18n = useI18n();
+  const { t, money, hours, people, dateFor, chipFor, area, day } = i18n;
   const navigate = useNavigate();
 
   const role = useActiveRole();
@@ -54,33 +99,7 @@ export function useDistributionRows(options: { chips?: boolean } = {}): HistoryR
   }
 
   if (mine.enabled) {
-    return mine.distributions.map((distribution) => {
-      const own = mine.entries.filter(
-        (e) => e.distributionId === distribution.id && e.isOwn !== false,
-      );
-      const amountCents = own.reduce((sum, e) => sum + e.amountCents, 0);
-      const minutes = own.reduce((sum, e) => sum + e.workedMinutes, 0);
-      // Three states, not two: a distribution sent when confirmation was not
-      // required is not "waiting", and never was.
-      const view = ackViewFor(own, distribution.acknowledgementRequired);
-      const presentation = ACK_VIEW[view];
-      // A replaced payout is history: it says so instead of asking for a
-      // confirmation nobody can give any more.
-      const replaced = Boolean(distribution.supersededBy);
-      return {
-        id: distribution.id,
-        date: day(new Date(`${distribution.periodStart}T12:00:00`)),
-        meta: `${own[0]?.areaName ?? ''} · ${hours(minutes / 60)}`.replace(/^ · /, ''),
-        amount: money(amountCents / 100),
-        status: replaced ? t('corrReplaced') : t(presentation.label),
-        statusColor:
-          replaced || presentation.tone === 'subtle'
-            ? 'var(--color-text-subtle)'
-            : 'var(--color-accent)',
-        chip: undefined,
-        onOpen: () => navigate(`/payout/${distribution.id}`),
-      };
-    });
+    return rowsForMyShare(mine, i18n, navigate);
   }
 
   return state.distributions.map((distribution) => {

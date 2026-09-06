@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { Avatar } from '@/components/ui/Avatar';
@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icon';
 import { InfoNote } from '@/components/ui/Note';
 import { SectionLabel } from '@/components/ui/SectionLabel';
+import { Sheet } from '@/components/ui/Sheet';
 import { AREA_ORDER } from '@/data/areas';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
 import { useI18n } from '@/hooks/useI18n';
@@ -27,6 +28,9 @@ interface HoursReviewPageProps {
   mode: 'wizard' | 'review';
 }
 
+/** The same ceiling the employee's question note has; the column itself is unbounded. */
+const REVIEW_NOTE_MAX = 500;
+
 /**
  * Hours worked, by area.
  *
@@ -43,6 +47,10 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
   const navigate = useNavigate();
 
   const wizard = mode === 'wizard';
+
+  /** The shift being sent back, while the note sheet is open. */
+  const [rejecting, setRejecting] = useState<Shift | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
 
   /**
    * Step 3 of the wizard shows the hours that will take part, so it asks for
@@ -136,6 +144,42 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
     if (!result.ok) show(t(SHIFT_FAILURE_KEY[result.failure ?? 'unknown']));
   };
 
+  /**
+   * One shift at a time, with the same guarded UPDATE the bulk button uses.
+   *
+   * Sending a shift back is a status change, never a deletion: the row keeps
+   * its times, gains the note, and stays visible to the person so they can
+   * correct it and submit again under the existing employee policy. The
+   * sheet closes only once the database has said yes — a manager who sees it
+   * close must be able to trust that the note went out.
+   */
+  const approveOne = async (entry: Shift) => {
+    if (queue.busy) return;
+    const result = await queue.approve(entry.id);
+    if (!result.ok) {
+      show(t(SHIFT_FAILURE_KEY[result.failure ?? 'unknown']));
+      return;
+    }
+    show(t('shApproved'));
+  };
+
+  const closeReject = () => {
+    setRejecting(null);
+    setRejectNote('');
+  };
+
+  const confirmReject = async () => {
+    if (!rejecting || queue.busy) return;
+    const note = rejectNote.trim();
+    const result = await queue.reject(rejecting.id, note.length > 0 ? note : undefined);
+    if (!result.ok) {
+      show(t(SHIFT_FAILURE_KEY[result.failure ?? 'unknown']));
+      return;
+    }
+    closeReject();
+    show(t('shRejected'));
+  };
+
   return (
     <Screen
       title={wizard ? t('hoursWorked') : t('hoursReviewTitle')}
@@ -159,8 +203,13 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
               },
             }
           : {
-              label: queue.busy ? t('shApproving') : t('saveHours'),
-              muted: queue.busy,
+              // The bulk action says what it does and how many it touches.
+              label: queue.busy
+                ? t('shApproving')
+                : realReview
+                  ? t('shApproveAllN').replace('{n}', String(pending.length))
+                  : t('saveHours'),
+              muted: queue.busy || (realReview && pending.length === 0),
               onClick: () => {
                 if (realReview) {
                   void approveAll();
@@ -235,7 +284,11 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
                           >
                             {`${formatClock(entry.startMinutes)} – ${formatClock(entry.endMinutes)} · ${
                               entry.areaName ?? t('notSet')
-                            }${entry.areaFromShift ? ` (${t('dAreaFromShift')})` : ''}`}
+                            }${entry.areaFromShift ? ` (${t('dAreaFromShift')})` : ''}${
+                              entry.status === 'rejected' && entry.reviewNote
+                                ? ` · ${entry.reviewNote}`
+                                : ''
+                            }`}
                           </span>
                         </span>
                         <Badge tone={status.tone} style={{ color: status.color }}>
@@ -278,6 +331,30 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
                           +
                         </button>
                       </div>
+
+                      {/* The decision, per shift, on the standalone review
+                          only — step 3 of the wizard lists approved hours and
+                          has nothing left to decide. */}
+                      {!wizard && entry.status === 'submitted' ? (
+                        <div className={ui.inline} style={{ gap: 8, justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            className={ui.chip}
+                            disabled={queue.busy}
+                            onClick={() => setRejecting(entry)}
+                          >
+                            {t('shReject')}
+                          </button>
+                          <button
+                            type="button"
+                            className={`${ui.chip} ${ui.chipSelected}`}
+                            disabled={queue.busy}
+                            onClick={() => void approveOne(entry)}
+                          >
+                            {t('shApprove')}
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -409,6 +486,37 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
         </>
       )}
 
+      {/* Sending back is a sentence to the person, not a verdict. The note is
+          optional; the status change is the message either way. */}
+      <Sheet
+        open={rejecting !== null}
+        title={t('shRejectTitle').replace('{name}', rejecting?.memberName ?? '')}
+        onClose={() => {
+          if (!queue.busy) closeReject();
+        }}
+      >
+        <div className={ui.stackTight}>
+          <label className={ui.fieldLabel} htmlFor="reject-note">
+            {t('shRejectNoteLabel')}
+          </label>
+          <textarea
+            id="reject-note"
+            className={ui.fieldInput}
+            rows={3}
+            maxLength={REVIEW_NOTE_MAX}
+            placeholder={t('shRejectNotePlaceholder')}
+            value={rejectNote}
+            onChange={(event) => setRejectNote(event.target.value)}
+            style={{ resize: 'none', lineHeight: 1.5, paddingTop: 10, height: 'auto' }}
+          />
+          <Button muted={queue.busy} onClick={() => void confirmReject()}>
+            {queue.busy ? t('shSaving') : t('shReject')}
+          </Button>
+          <Button variant="ghost" onClick={closeReject}>
+            {t('qCancel')}
+          </Button>
+        </div>
+      </Sheet>
     </Screen>
   );
 }

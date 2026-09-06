@@ -220,7 +220,12 @@ async function review(
       status,
       reviewed_by: membership.id,
       reviewed_at: new Date().toISOString(),
-      ...(note !== undefined ? { review_note: note } : {}),
+      // The note belongs to *this* review. A rejection without one must not
+      // resurrect the note from an earlier rejection of the same row — the
+      // employee cannot clear it themselves (`app.guard_shift_columns`), so a
+      // resubmitted shift still carries the old text until the manager's next
+      // decision overwrites it here.
+      review_note: note ?? null,
     })
     .eq('id', shiftId)
     .eq('workplace_id', membership.workplaceId)
