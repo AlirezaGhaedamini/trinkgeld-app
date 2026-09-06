@@ -9,6 +9,8 @@
  */
 
 import type { Enums, Tables } from '@/types/database';
+import type { StringKey } from '@/i18n/strings';
+import type { MemberRole } from '@/workplace/types';
 
 export type RuleMethod = Enums<'rule_method'>;
 export type OverlapBasis = Enums<'overlap_basis'>;
@@ -24,6 +26,16 @@ export const SUPPORTED_BASES: OverlapBasis[] = ['longest_shift', 'pairwise'];
 
 /** The methods `calculate_distribution()` actually branches on. */
 export const METHODS: RuleMethod[] = ['hours_points', 'hours', 'equal'];
+
+/**
+ * The enum, spelled the way a person reads it. Every screen that names a
+ * method goes through this, so `hours_points` is never printed to anybody.
+ */
+export const METHOD_LABEL: Record<RuleMethod, StringKey> = {
+  hours_points: 'mPoints',
+  hours: 'mHours',
+  equal: 'mEqual',
+};
 
 /** distribution_rule_areas, joined to the workplace's own area list. */
 export interface AreaShare {
@@ -75,10 +87,15 @@ export interface WorkplaceSettings {
   peerEntryVisibility: PeerVisibility;
 }
 
-/** One active member's default area, for the 0%-share warning. */
+/**
+ * One active member's default area, for the 0%-share warning — and their
+ * role, so the overview's first-run check can tell an employee from the
+ * manager who set the workplace up.
+ */
 export interface MemberArea {
   memberId: string;
   areaId: string | null;
+  role: MemberRole;
 }
 
 export interface RulesState {

@@ -18,6 +18,7 @@ import { peopleInResult } from '@/lib/distribution';
 import { colorForAreaKey } from '@/data/areas';
 import { DISTRIBUTION_FAILURE_KEY } from '@/distribution/errors';
 import { useDistributionWizard } from '@/distribution/useDistribution';
+import { METHOD_LABEL } from '@/rules/types';
 import type { AreaId } from '@/types';
 import ui from '@/components/ui/ui.module.css';
 import styles from '@/pages/pages.module.css';
@@ -74,6 +75,7 @@ export function WizardResultPage() {
 
   /** Recalculate: the engine replaces any existing draft for this pool. */
   const calculate = async () => {
+    if (wizard.busy) return;
     const done = await wizard.calculate();
     if (!done.ok) {
       const base = t(DISTRIBUTION_FAILURE_KEY[done.failure ?? 'unknown']);
@@ -83,15 +85,25 @@ export function WizardResultPage() {
     }
   };
 
-  /** Finalise. send_distribution() re-checks the inputs and refuses if stale. */
+  /**
+   * Finalise. send_distribution() re-checks the inputs and refuses if stale.
+   *
+   * The draft's id is taken before the send, because the send's own refresh
+   * clears the wizard's draft: the pool is distributed and there is nothing
+   * left to preview. The confirmation then names that night in its route and
+   * reads the real record, so it shows what was actually sent and survives a
+   * refresh.
+   */
   const finalise = async () => {
+    if (wizard.busy) return;
+    const sentId = wizard.draft?.id ?? detail?.distribution.id ?? null;
     const done = await wizard.send();
     setConfirmOpen(false);
     if (!done.ok) {
       show(t(DISTRIBUTION_FAILURE_KEY[done.failure ?? 'unknown']));
       return;
     }
-    navigate('/manager/sent', { replace: true });
+    navigate(sentId ? `/manager/sent/${sentId}` : '/manager/distributions', { replace: true });
   };
 
   return (
@@ -203,7 +215,7 @@ export function WizardResultPage() {
 
       <Note>
         {real && detail
-          ? `${t('methodPrefix')}: ${detail.distribution.method} · ${t('dRuleVersion')} ${
+          ? `${t('methodPrefix')}: ${t(METHOD_LABEL[detail.distribution.method])} · ${t('dRuleVersion')} ${
               detail.distribution.ruleVersion
             } · ${t('dEngine')} ${detail.distribution.engineVersion ?? '—'}`
           : `${t('methodPrefix')}: ${t(state.draft.method)}`}
@@ -225,7 +237,11 @@ export function WizardResultPage() {
             { label: t('cPeople'), value: String(headcount) },
             {
               label: t('cRule'),
-              value: real ? (detail?.distribution.method ?? '') : t(state.draft.method),
+              value: real
+                ? detail
+                  ? t(METHOD_LABEL[detail.distribution.method])
+                  : ''
+                : t(state.draft.method),
             },
           ].map((row) => (
             <div key={row.label} className={ui.row} style={{ padding: '12px 0' }}>

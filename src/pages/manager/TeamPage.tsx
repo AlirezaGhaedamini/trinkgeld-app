@@ -1,14 +1,17 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge, PointsBadge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { ChipGroup } from '@/components/ui/ChipGroup';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icon';
 import { ListRow } from '@/components/ui/ListRow';
-import { Note } from '@/components/ui/Note';
+import { InfoNote, Note } from '@/components/ui/Note';
 import { SectionLabel } from '@/components/ui/SectionLabel';
+import { Sheet } from '@/components/ui/Sheet';
 import { AREA_ORDER } from '@/data/areas';
 import { useAppState } from '@/hooks/useAppState';
 import { useI18n } from '@/hooks/useI18n';
@@ -16,7 +19,7 @@ import { useToast } from '@/hooks/useToast';
 import { useConfig } from '@/config/useConfig';
 import { TEAM_FAILURE_KEY } from '@/team/errors';
 import { useTeam } from '@/team/useTeam';
-import type { MemberStatus, TeamMember } from '@/team/types';
+import { roleFitsArea, type MemberStatus, type PendingRequest, type TeamMember } from '@/team/types';
 import type { StringKey } from '@/i18n/strings';
 import ui from '@/components/ui/ui.module.css';
 import styles from '@/pages/pages.module.css';
@@ -56,9 +59,35 @@ function RealTeam() {
   const onRoster = members.filter((m) => m.status !== 'left');
   const gone = members.filter((m) => m.status === 'left');
 
-  const approve = async (invitationId: string) => {
-    const result = await team.approveRequest(invitationId, null, null);
-    show(result.ok ? t('tmApproved') : t(TEAM_FAILURE_KEY[result.failure ?? 'unknown']));
+  /* ── letting somebody in ─────────────────────────────────────────────────
+     approve_join_request() takes an area and a role. Sending neither, as this
+     screen used to, made a member the engine leaves out of every distribution
+     and told the manager nothing. The area is asked for and required; the
+     role stays optional, exactly as the backend allows, and the request's own
+     proposed area is offered first when there is one. */
+  const [approving, setApproving] = useState<PendingRequest | null>(null);
+  const [approveAreaId, setApproveAreaId] = useState<string | null>(null);
+  const [approveRoleId, setApproveRoleId] = useState<string | null>(null);
+  const liveRoles = useMemo(() => roles.filter((r) => !r.archived), [roles]);
+  const rolesForApprove = liveRoles.filter((r) => r.areaId === approveAreaId);
+
+  const openApprove = (request: PendingRequest) => {
+    setApproving(request);
+    setApproveAreaId(request.proposedAreaId);
+    setApproveRoleId(null);
+  };
+  const confirmApprove = async () => {
+    if (!approving || !approveAreaId || team.busy) return;
+    const roleId = roleFitsArea(approveRoleId, approveAreaId, liveRoles) ? approveRoleId : null;
+    const result = await team.approveRequest(approving.invitationId, approveAreaId, roleId);
+    /* A refusal keeps the sheet and the choices on screen: the message says
+       what to change, and the button is there to try again. */
+    if (!result.ok) {
+      show(t(TEAM_FAILURE_KEY[result.failure ?? 'unknown']));
+      return;
+    }
+    setApproving(null);
+    show(t('tmApproved'));
   };
   const decline = async (invitationId: string) => {
     const result = await team.declineRequest(invitationId);
@@ -90,10 +119,27 @@ function RealTeam() {
     />
   );
 
-  if (team.status === 'error') {
+  /* Nothing is shown as "nobody here" until the roster has actually arrived:
+     a slow or failed fetch is said out loud instead. */
+  if (!team.state) {
     return (
-      <Screen title={t('tabTeam')} titleSize={26} back={false} aboveTabs>
-        <EmptyState title={t('authNetwork')} />
+      <Screen
+        title={t('tabTeam')}
+        titleSize={26}
+        back={false}
+        aboveTabs
+        action={{ label: t('invite'), icon: 'user-plus', onClick: () => navigate('/manager/invite') }}
+      >
+        {team.status === 'error' ? (
+          <>
+            <EmptyState title={t('loadFailed')} />
+            <Button variant="secondary" block onClick={() => void team.refresh()}>
+              {t('retry')}
+            </Button>
+          </>
+        ) : (
+          <EmptyState title={t('dLoading')} />
+        )}
       </Screen>
     );
   }
@@ -138,7 +184,7 @@ function RealTeam() {
                   type="button"
                   className={`${ui.chip} ${ui.chipSelected}`}
                   disabled={team.busy}
-                  onClick={() => void approve(request.invitationId)}
+                  onClick={() => openApprove(request)}
                 >
                   {t('tmApprove')}
                 </button>
@@ -192,8 +238,9 @@ function RealTeam() {
 
       {onRoster.some((m) => m.areaId === null) ? (
         <section className={ui.stackFlush}>
-          <SectionLabel>{t('tmNoRole')}</SectionLabel>
+          <SectionLabel>{t('tmNoArea')}</SectionLabel>
           {onRoster.filter((m) => m.areaId === null).map(row)}
+          <Note>{t('tmNoAreaNote')}</Note>
         </section>
       ) : null}
 
@@ -203,6 +250,53 @@ function RealTeam() {
           {gone.map(row)}
         </section>
       ) : null}
+
+      <Sheet
+        open={approving !== null}
+        title={t('tmApproveTitle').replace('{name}', approving?.requesterName ?? '')}
+        onClose={() => setApproving(null)}
+      >
+        <div className={ui.stackTight}>
+          <InfoNote icon="info">{t('tmApproveBody')}</InfoNote>
+
+          <SectionLabel>{t('areaHead')}</SectionLabel>
+          {areas.length === 0 && config.status !== 'ready' ? (
+            <EmptyState title={t('dLoading')} />
+          ) : (
+            <ChipGroup<string>
+              label={t('areaHead')}
+              value={approveAreaId ?? ''}
+              options={areas.map((a) => ({ value: a.id, label: a.name }))}
+              onChange={(next) => {
+                setApproveAreaId(next);
+                if (!roleFitsArea(approveRoleId, next, liveRoles)) setApproveRoleId(null);
+              }}
+            />
+          )}
+
+          {rolesForApprove.length > 0 ? (
+            <>
+              <SectionLabel>{t('tmRoleOptional')}</SectionLabel>
+              <ChipGroup<string>
+                label={t('tmRoleOptional')}
+                value={approveRoleId ?? ''}
+                options={[
+                  { value: '', label: t('tmNoRole') },
+                  ...rolesForApprove.map((r) => ({ value: r.id, label: r.name })),
+                ]}
+                onChange={(next) => setApproveRoleId(next || null)}
+              />
+            </>
+          ) : null}
+
+          <Button disabled={team.busy || !approveAreaId} onClick={() => void confirmApprove()}>
+            {t('tmApprove')}
+          </Button>
+          <Button variant="ghost" onClick={() => setApproving(null)}>
+            {t('back')}
+          </Button>
+        </div>
+      </Sheet>
     </Screen>
   );
 }

@@ -4,6 +4,8 @@ import type { Session } from '@supabase/supabase-js';
 import { AuthContext, type AuthStatus, type AuthValue } from '@/auth/authContext';
 import { classifyAuthError } from '@/auth/errors';
 import { loadProfile, saveProfileLocale, type Profile } from '@/auth/profile';
+import { clearReturnTo } from '@/auth/returnTo';
+import { clearPendingJoin } from '@/workplace/pendingJoin';
 import { getSupabase, isSupabaseConfigured, type TipCrewClient } from '@/lib/supabase';
 import { useI18n } from '@/hooks/useI18n';
 
@@ -174,6 +176,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       /* already gone server-side; the local session is cleared either way */
     } finally {
+      // Whatever this device remembered for this person goes with them: a
+      // path to return to, a join request still waiting. Neither belongs to
+      // whoever signs in next.
+      clearReturnTo();
+      clearPendingJoin();
       if (alive.current) {
         setSession(null);
         setProfile(null);

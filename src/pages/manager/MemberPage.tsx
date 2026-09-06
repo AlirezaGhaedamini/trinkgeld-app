@@ -220,6 +220,9 @@ function RealMember() {
             if (!roleFitsArea(roleId, next, roles)) setRoleId(null);
           }}
         />
+        {/* Said here, where it can be fixed: the engine has no area to weight
+            an hour in, so this person receives nothing until one is set. */}
+        {areaId === null ? <InfoNote icon="warning-circle">{t('tmMemberNoAreaNote')}</InfoNote> : null}
       </div>
 
       {/* ── role ─────────────────────────────────────────────────────────── */}

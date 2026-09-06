@@ -101,6 +101,21 @@ export function isLastManager(member: TeamMember, activeManagers: number): boole
 }
 
 /**
+ * The link an invitation travels as.
+ *
+ * The token is 64 hex characters and is only ever meant to be opened, never
+ * typed, so the invite screen hands out a full URL for this deployment: the
+ * app's origin and path, then the hash route the join screen reads the token
+ * from. `search` is left out on purpose: a `?demo=1` must not ride along.
+ */
+export function joinLinkFor(
+  location: { origin: string; pathname: string },
+  token: string,
+): string {
+  return `${location.origin}${location.pathname}#/join?token=${encodeURIComponent(token)}`;
+}
+
+/**
  * A role belongs to exactly one area, and migration 20 refuses any other
  * pairing. So changing the area clears a role that no longer fits, and the
  * manager picks one from the new area — or leaves it unset, which is legal and

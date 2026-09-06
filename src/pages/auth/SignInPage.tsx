@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { Button } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { AUTH_FAILURE_KEY } from '@/auth/errors';
+import { safeReturnTo, takeReturnTo } from '@/auth/returnTo';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
 import { useAuth, useRealAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
@@ -35,6 +36,7 @@ export function SignInPage() {
   const { t } = useI18n();
   const { show } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const demo = dataMode === 'demo';
   const [email, setEmail] = useState(session.accountEmail);
@@ -44,8 +46,21 @@ export function SignInPage() {
   // one of the two demo accounts.
   const ready = demo || (email.trim().length > 0 && password.length > 0);
 
+  /* Where RequireSession sent us from, query string included, so an
+     invitation link keeps its token across the sign-in. */
+  const from = safeReturnTo((location.state as { from?: unknown } | null)?.from);
+
+  /* The demo's landing, chosen by the local role toggle. */
   const goHome = () => {
     navigate(session.role === 'manager' ? '/manager' : '/home', { replace: true });
+  };
+
+  /* Real mode never routes on the local role. `/` asks the membership who this
+     is. The same-tab destination arrives as router state; the stored one is
+     the email-confirmation return, and it answers only for the account that
+     just signed in — which is the address typed into this form. */
+  const continueSignedIn = () => {
+    navigate(from ?? takeReturnTo(email) ?? '/', { replace: true });
   };
 
   const submit = async () => {
@@ -69,7 +84,7 @@ export function SignInPage() {
     }
     // AuthBridge hands the identity to the local state; the guard holds the
     // route for the frame that takes.
-    goHome();
+    continueSignedIn();
   };
 
   const label = auth.busy
@@ -135,23 +150,28 @@ export function SignInPage() {
             variant="secondary"
             block
             disabled={auth.busy}
-            onClick={() => navigate('/signup')}
+            onClick={() => navigate('/signup', { state: location.state })}
           >
             {t('createAcc')}
           </Button>
         </form>
 
-        <div className={styles.mobileOnly}>
-          <SegmentedControl<UserRole>
-            label={t('iAm')}
-            value={session.role}
-            options={[
-              { value: 'employee', label: t('empRole') },
-              { value: 'manager', label: t('mgrRole') },
-            ]}
-            onChange={(role) => dispatch({ type: 'setRole', role })}
-          />
-        </div>
+        {/* The role toggle belongs to the demo, where it picks which sample
+            account you are. A real account's role is a property of its
+            membership, so the control is not shown there. */}
+        {real ? null : (
+          <div className={styles.mobileOnly}>
+            <SegmentedControl<UserRole>
+              label={t('iAm')}
+              value={session.role}
+              options={[
+                { value: 'employee', label: t('empRole') },
+                { value: 'manager', label: t('mgrRole') },
+              ]}
+              onChange={(role) => dispatch({ type: 'setRole', role })}
+            />
+          </div>
+        )}
 
         {demo ? <p className={ui.note}>{t('demoNote')}</p> : null}
       </div>

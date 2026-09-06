@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthSplash } from '@/auth/AuthSplash';
+import { clearReturnTo, peekReturnTo } from '@/auth/returnTo';
 import { useAppState } from '@/hooks/useAppState';
 import { useAuth, useRealAuth } from '@/hooks/useAuth';
 import { useActiveRole, useWorkplace } from '@/hooks/useWorkplace';
@@ -30,14 +31,24 @@ function useSessionGate(): Gate {
   return session.signedIn ? 'in' : 'pending';
 }
 
-/** Everything past sign-in needs a session. */
+/**
+ * Everything past sign-in needs a session.
+ *
+ * The place the person was heading is kept WITH its query string: an
+ * invitation is `#/join?token=…`, and a pathname alone would drop the token.
+ * It travels as router state and nothing else — state dies with the tab, so
+ * a link opened on a shared device is never waiting for whoever signs in
+ * next. The only persisted return path is the one sign-up stores for an
+ * email confirmation, bound to that account.
+ */
 export function RequireSession() {
   const gate = useSessionGate();
   const location = useLocation();
+  const from = `${location.pathname}${location.search}`;
 
   if (gate === 'pending') return <AuthSplash />;
   if (gate === 'out') {
-    return <Navigate to="/signin" replace state={{ from: location.pathname }} />;
+    return <Navigate to="/signin" replace state={{ from }} />;
   }
   return <Outlet />;
 }
@@ -104,17 +115,37 @@ export function RequireManager() {
   return <Outlet />;
 }
 
-/** Send people to the right home for who they are. */
+/**
+ * Send people to the right home for who they are.
+ *
+ * With one exception: an account that signed up on an invitation link and had
+ * to confirm by email comes back to that link first, because the confirmation
+ * reopens the app at its root. The remembered path is read only once routing
+ * can actually be decided — memberships loaded, or their load failed — and
+ * only for the account that stored it. Reading it on a splash render and
+ * clearing it in an effect would throw it away before anyone was sent
+ * anywhere. Whatever is in the slot once this screen has settled, used or
+ * not meant for this account, is cleared: it has no future on this device.
+ */
 export function HomeRedirect() {
   const gate = useSessionGate();
+  const auth = useAuth();
   const workplace = useWorkplace();
   const role = useActiveRole();
+
+  const settled =
+    workplace.enabled && (workplace.status === 'ready' || workplace.status === 'error');
+  const back = gate === 'in' && settled ? peekReturnTo(auth.email) : null;
+  useEffect(() => {
+    if (gate === 'in' && settled) clearReturnTo();
+  }, [gate, settled]);
 
   if (gate === 'pending') return <AuthSplash />;
   if (gate === 'out') return <Navigate to="/signin" replace />;
 
   if (workplace.enabled) {
     if (workplace.status === 'idle' || workplace.status === 'loading') return <AuthSplash />;
+    if (back) return <Navigate to={back} replace />;
     if (workplace.memberships.length === 0) return <Navigate to="/join" replace />;
     if (!workplace.activeMembership) return <Navigate to="/workplaces" replace />;
   }

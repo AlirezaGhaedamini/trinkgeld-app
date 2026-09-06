@@ -132,7 +132,11 @@ type QueueStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
  * wizard wants only what has been approved, because only approved shifts take
  * part in a distribution.
  */
-export function useReviewQueue(statuses: readonly QueueStatus[] = ['submitted', 'approved', 'rejected']) {
+export function useReviewQueue(
+  statuses: readonly QueueStatus[] = ['submitted', 'approved', 'rejected'],
+  /** Business days to confine the queue to; null means every date. */
+  period: { start: string; end: string } | null = null,
+) {
   const client = useClient();
   const workplace = useWorkplace();
   const membership = workplace.activeMembership;
@@ -152,12 +156,21 @@ export function useReviewQueue(statuses: readonly QueueStatus[] = ['submitted', 
     };
   }, []);
 
+  // A period object is rebuilt on every render; its two dates are the identity.
+  const periodKey = period ? `${period.start}..${period.end}` : '';
+
   const refresh = useCallback(async () => {
     if (!client || !membership) return;
     const mine = (token.current += 1);
     setStatus((s) => (s === 'ready' ? s : 'loading'));
     try {
-      const rows = await fetchReviewQueue(client, membership, statuses);
+      const [start, end] = periodKey ? periodKey.split('..') : [undefined, undefined];
+      const rows = await fetchReviewQueue(
+        client,
+        membership,
+        statuses,
+        start && end ? { start, end } : undefined,
+      );
       if (!alive.current || mine !== token.current) return;
       setShifts(rows);
       setStatus('ready');
@@ -166,7 +179,7 @@ export function useReviewQueue(statuses: readonly QueueStatus[] = ['submitted', 
       setStatus('error');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, membership, statuses.join(',')]);
+  }, [client, membership, statuses.join(','), periodKey]);
 
   useEffect(() => {
     if (!enabled) {

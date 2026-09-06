@@ -54,12 +54,14 @@ function useClient(): TipCrewClient | null {
  * day, and splitting them across four hooks would mean four sources of truth
  * for which day that is.
  */
-export function useDistributionWizard() {
+export function useDistributionWizard(options: { enabled?: boolean } = {}) {
   const client = useClient();
   const workplace = useWorkplace();
   const membership = workplace.activeMembership;
   const isManager = membership?.role === 'manager';
-  const enabled = Boolean(client) && workplace.enabled && isManager;
+  // A screen shared between the wizard and a standalone flow can hold the
+  // hook off; nothing is fetched then, and the business date is still known.
+  const enabled = Boolean(client) && workplace.enabled && isManager && (options.enabled ?? true);
 
   const [status, setStatus] = useState<LoadStatus>('idle');
   const [busy, setBusy] = useState(false);
@@ -378,6 +380,56 @@ export function useDistributionHistory() {
     loadSettlement, loadMemberSettlement, recordPayout,
     loadPayoutEvents, reversePayout,
   };
+}
+
+/**
+ * One distribution, read back by id.
+ *
+ * The sent confirmation needs exactly one record and nothing else: the id
+ * arrives in the route, the amount and the headcount are read from the row
+ * the engine wrote, and a refresh of that screen reads the same row again. It
+ * deliberately does not load the whole history to show one night.
+ */
+export function useDistributionDetail(distributionId: string | null | undefined) {
+  const client = useClient();
+  const workplace = useWorkplace();
+  const membership = workplace.activeMembership;
+  const enabled =
+    Boolean(client) && workplace.enabled && membership?.role === 'manager' && Boolean(distributionId);
+
+  const [status, setStatus] = useState<LoadStatus>('idle');
+  const [detail, setDetail] = useState<DistributionDetail | null>(null);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!client || !membership || !distributionId) return;
+    setStatus((s) => (s === 'ready' ? s : 'loading'));
+    try {
+      const loaded = await api.fetchDistributionDetail(client, membership, distributionId);
+      if (!alive.current) return;
+      setDetail(loaded);
+      setStatus('ready');
+    } catch {
+      if (alive.current) setStatus('error');
+    }
+  }, [client, membership, distributionId]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setDetail(null);
+      setStatus('idle');
+      return;
+    }
+    void refresh();
+  }, [enabled, refresh]);
+
+  return { enabled, status, detail, refresh };
 }
 
 /**

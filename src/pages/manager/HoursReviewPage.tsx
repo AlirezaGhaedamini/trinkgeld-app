@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icon';
 import { InfoNote } from '@/components/ui/Note';
@@ -14,6 +15,7 @@ import { useShiftLabel } from '@/hooks/useShiftLabel';
 import { useToast } from '@/hooks/useToast';
 import { formatClock, toHours, workedMinutes } from '@/lib/time';
 import { liveOverlap, submissionCount } from '@/state/selectors';
+import { useDistributionWizard } from '@/distribution/useDistribution';
 import { SHIFT_FAILURE_KEY } from '@/shifts/errors';
 import type { Shift } from '@/shifts/types';
 import { useReviewQueue } from '@/shifts/useShifts';
@@ -35,28 +37,53 @@ interface HoursReviewPageProps {
 export function HoursReviewPage({ mode }: HoursReviewPageProps) {
   const state = useAppState();
   const dispatch = useAppDispatch();
-  const { t, num, hours, duration, area, language } = useI18n();
+  const { t, num, hours, duration, area, language, day } = useI18n();
   const shift = useShiftLabel();
   const { show } = useToast();
   const navigate = useNavigate();
 
+  const wizard = mode === 'wizard';
+
   /**
-   * Real review, but only on the standalone screen. The wizard is step 3 of
-   * the distribution flow, which is Phase 3D — it stays on the local dataset so
-   * the two are never half-connected.
+   * Step 3 of the wizard shows the hours that will take part, so it asks for
+   * approved shifts only — a submitted shift is not eligible for a payout —
+   * and only for the period of the pool being distributed. The pool is the
+   * authority: its dates are read from the wizard hook, and the device's
+   * business date is the fallback only for the moment before any pool
+   * exists. Step 1 opened the pool with that same date, so the two agree at
+   * the time — and if the business-day cut-off passes between the steps, the
+   * pool's own dates win. The hook is held off on the standalone review
+   * screen, which is not about one night.
    */
-  // Step 3 of the wizard shows the hours that will take part, so it asks for
-  // approved shifts only — a submitted shift is not eligible for a payout.
+  const wizardState = useDistributionWizard({ enabled: wizard });
+  const period = !wizard
+    ? null
+    : wizardState.pool
+      ? { start: wizardState.pool.periodStart, end: wizardState.pool.periodEnd }
+      : wizardState.businessDate
+        ? { start: wizardState.businessDate, end: wizardState.businessDate }
+        : null;
   const queue = useReviewQueue(
-    mode === 'wizard' ? ['approved'] : ['submitted', 'approved', 'rejected'],
+    wizard ? ['approved'] : ['submitted', 'approved', 'rejected'],
+    period,
   );
   const realReview = queue.enabled;
+  /* Until the wizard knows whether a pool exists, the queue may hold the
+     fallback night's answer. It is not shown. */
+  const wizardSettling =
+    wizard && realReview && wizardState.status !== 'ready' && wizardState.status !== 'error';
+  const wizardDateLabel = period
+    ? period.start === period.end
+      ? day(new Date(`${period.start}T12:00:00`))
+      : `${day(new Date(`${period.start}T12:00:00`))} – ${day(new Date(`${period.end}T12:00:00`))}`
+    : '';
+  const nothingToDistribute =
+    realReview && (wizardSettling || queue.status !== 'ready' || queue.shifts.length === 0);
 
   const grouping = liveOverlap(state);
   const overlapFor = (employeeId: string) =>
     grouping.rows.find((row) => row.employeeId === employeeId);
 
-  const wizard = mode === 'wizard';
   const submitted = submissionCount(state);
 
   const nobodyHasHours = grouping.rows.length === 0;
@@ -120,7 +147,17 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
       }
       cta={
         wizard
-          ? { label: t('calculate'), onClick: () => navigate('/manager/new/result') }
+          ? {
+              label: t('calculate'),
+              muted: nothingToDistribute,
+              onClick: () => {
+                if (nothingToDistribute) {
+                  show(t('wizNoApprovedBody'));
+                  return;
+                }
+                navigate('/manager/new/result');
+              },
+            }
           : {
               label: queue.busy ? t('shApproving') : t('saveHours'),
               muted: queue.busy,
@@ -137,18 +174,39 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
     >
       <InfoNote icon="check-circle">
         {wizard
-          ? `${submitted}/${state.employees.length} ${t('hoursNoteA')}`
+          ? realReview
+            ? t('wizHoursNote').replace('{date}', wizardDateLabel)
+            : `${submitted}/${state.employees.length} ${t('hoursNoteA')}`
           : t('hoursReviewBody')}
       </InfoNote>
 
       {realReview ? (
         <>
-          {queue.status === 'loading' ? <EmptyState title={t('shLoading')} /> : null}
-          {queue.status !== 'loading' && realGroups.length === 0 ? (
-            <EmptyState title={t('shNoQueue')}>{t('shNoQueueBody')}</EmptyState>
+          {queue.status === 'loading' || wizardSettling ? <EmptyState title={t('shLoading')} /> : null}
+          {queue.status === 'error' && !wizardSettling ? (
+            <>
+              <EmptyState title={t('loadFailed')} />
+              <Button variant="secondary" block onClick={() => void queue.refresh()}>
+                {t('retry')}
+              </Button>
+            </>
+          ) : null}
+          {queue.status === 'ready' && !wizardSettling && realGroups.length === 0 ? (
+            wizard ? (
+              <>
+                <EmptyState title={t('wizNoApproved').replace('{date}', wizardDateLabel)}>
+                  {t('wizNoApprovedBody')}
+                </EmptyState>
+                <Button variant="secondary" block onClick={() => navigate('/manager/hours')}>
+                  {t('hoursReviewTitle')}
+                </Button>
+              </>
+            ) : (
+              <EmptyState title={t('shNoQueue')}>{t('shNoQueueBody')}</EmptyState>
+            )
           ) : null}
 
-          {realGroups.map(([areaName, rows]) => {
+          {wizardSettling ? null : realGroups.map(([areaName, rows]) => {
             const areaHours = rows.reduce((sum, entry) => sum + entry.workedMinutes / 60, 0);
             return (
               <section key={areaName} className={ui.stackFlush}>

@@ -14,7 +14,7 @@ import { useWorkplace } from '@/hooks/useWorkplace';
 import { useConfig } from '@/config/useConfig';
 import { TEAM_FAILURE_KEY } from '@/team/errors';
 import { useTeam } from '@/team/useTeam';
-import { roleFitsArea, type MemberRole } from '@/team/types';
+import { joinLinkFor, roleFitsArea, type MemberRole } from '@/team/types';
 import ui from '@/components/ui/ui.module.css';
 import styles from '@/pages/pages.module.css';
 
@@ -24,7 +24,9 @@ import styles from '@/pages/pages.module.css';
  *
  * create_invitation() returns the raw token exactly once — the database keeps
  * only its SHA-256 — so it is shown here, on the screen that made it, and never
- * in a list.
+ * in a list. It is shown as the link it travels in, `#/join?token=…`, because
+ * 64 hex characters are something to open, not something to read out: the
+ * six-character workplace code above is the thing a person types.
  */
 export function InvitePage() {
   const team = useTeam();
@@ -44,7 +46,9 @@ function RealInvite() {
   const [role, setRole] = useState<MemberRole>('employee');
   const [areaId, setAreaId] = useState<string | null>(null);
   const [roleId, setRoleId] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [link, setLink] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [invitedName, setInvitedName] = useState('');
 
   const areas = useMemo(
     () => (config.state?.areas ?? []).filter((a) => !a.archived),
@@ -68,10 +72,24 @@ function RealInvite() {
     show(t('copied'));
   };
 
+  /* Both the email and the name are checked here first: the database refuses
+     both anyway, but its refusal of an empty roster name is a bare check
+     constraint that no classifier can turn into advice. */
+  const ready = email.trim().length > 0 && name.trim().length > 0;
+
   const send = async () => {
+    if (team.busy) return;
+    if (email.trim().length === 0) {
+      show(t('tmErrNoEmail'));
+      return;
+    }
+    if (name.trim().length === 0) {
+      show(t('tmErrNoName'));
+      return;
+    }
     const result = await team.createInvitation({
-      email,
-      displayName: name,
+      email: email.trim(),
+      displayName: name.trim(),
       role,
       areaId,
       workplaceRoleId: roleFitsArea(roleId, areaId, config.state?.roles ?? []) ? roleId : null,
@@ -80,10 +98,23 @@ function RealInvite() {
       show(t(TEAM_FAILURE_KEY[result.failure ?? 'unknown']));
       return;
     }
-    setToken(result.value?.token ?? null);
+    setLink(result.value?.token ? joinLinkFor(window.location, result.value.token) : null);
+    setLinkCopied(false);
+    setInvitedName(name.trim());
     setEmail('');
     setName('');
     show(t('tmInviteCreated'));
+  };
+
+  const copyLink = async () => {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      /* clipboard blocked — the link is on screen anyway */
+    }
+    setLinkCopied(true);
+    show(t('copied'));
   };
 
   return (
@@ -165,28 +196,35 @@ function RealInvite() {
           </>
         ) : null}
 
-        <Button
-          block
-          muted={team.busy || email.trim().length === 0}
-          onClick={() => void send()}
-        >
+        <Button block muted={!ready} disabled={team.busy} onClick={() => void send()}>
           {t('invite')}
         </Button>
       </div>
 
-      {token ? (
+      {link ? (
         <Card tone="primary" padding="padded">
-          <p className={ui.fieldLabel}>{t('tmInviteCreated')}</p>
-          <p style={{ wordBreak: 'break-all', fontSize: 13, marginTop: 6 }} className="tabular">
-            {token}
-          </p>
-          <InfoNote icon="info">{t('tmInviteShare')}</InfoNote>
+          <div className={ui.stackTight}>
+            <p className={ui.fieldLabel}>{t('tmInviteLink')}</p>
+            <p style={{ wordBreak: 'break-all', fontSize: 13 }}>{link}</p>
+            <Button
+              variant="secondary"
+              quiet
+              block
+              icon={linkCopied ? 'check' : 'copy'}
+              onClick={() => void copyLink()}
+            >
+              {linkCopied ? t('copied') : t('tmCopyLink')}
+            </Button>
+            <InfoNote icon="info">{t('tmInviteShare').replace('{name}', invitedName)}</InfoNote>
+          </div>
         </Card>
       ) : null}
 
       <div className={ui.stackFlush}>
         <SectionLabel>{t('pendingInvites')}</SectionLabel>
-        {invites.length === 0 ? <EmptyState title={t('emptyInvites')} /> : null}
+        {!team.state && team.status !== 'error' ? <EmptyState title={t('dLoading')} /> : null}
+        {team.state && invites.length === 0 ? <EmptyState title={t('emptyInvites')} /> : null}
+        {!team.state && team.status === 'error' ? <EmptyState title={t('loadFailed')} /> : null}
         {invites.map((invite) => (
           <ListRow
             key={invite.invitationId}

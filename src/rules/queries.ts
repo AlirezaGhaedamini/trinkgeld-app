@@ -87,7 +87,7 @@ export async function fetchRulesState(
     client.from('workplaces').select('*').eq('id', workplaceId).single(),
     client
       .from('workplace_members')
-      .select('id, area_id')
+      .select('id, area_id, role')
       .eq('workplace_id', workplaceId)
       .eq('status', 'active'),
   ]);
@@ -179,7 +179,11 @@ export async function fetchRulesState(
     draft: shape(draftRow),
     roles,
     settings: toSettings(workplaceRes.data),
-    members: (membersRes.data ?? []).map((m) => ({ memberId: m.id, areaId: m.area_id })),
+    members: (membersRes.data ?? []).map((m) => ({
+      memberId: m.id,
+      areaId: m.area_id,
+      role: m.role,
+    })),
     areas: shapeShares(areaRows, new Map()),
   };
 }

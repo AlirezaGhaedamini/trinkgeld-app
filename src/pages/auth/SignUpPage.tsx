@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { InfoNote, Note } from '@/components/ui/Note';
 import { AUTH_FAILURE_KEY } from '@/auth/errors';
+import { rememberReturnTo, safeReturnTo, takeReturnTo } from '@/auth/returnTo';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
 import { useAuth, useRealAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
@@ -32,6 +33,11 @@ export function SignUpPage() {
   const { t } = useI18n();
   const { show } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  /* Where the person was heading before sign-in sent them here — an
+     invitation link, query string and all. */
+  const from = safeReturnTo((location.state as { from?: unknown } | null)?.from);
 
   const [name, setName] = useState(session.accountName);
   const [email, setEmail] = useState(session.accountEmail);
@@ -73,13 +79,18 @@ export function SignUpPage() {
     }
 
     if (result.needsEmailConfirmation) {
+      // The confirmation link reopens the app at its root. Keep the way back
+      // to the invitation, if there was one, for that moment — stored with
+      // the address that signed up, so only that account can use it, once.
+      if (from) rememberReturnTo(from, email);
       setPassword('');
       setAwaitingConfirmation(true);
       return;
     }
 
-    // Signed in already: the workplace step is next, exactly as before.
-    navigate('/join');
+    // Signed in already: back to the invitation if there was one, otherwise
+    // the workplace step, exactly as before.
+    navigate(from ?? takeReturnTo(email) ?? '/join');
   };
 
   if (arrivedSignedIn) return <Navigate to="/" replace />;
@@ -141,19 +152,24 @@ export function SignUpPage() {
           />
         </div>
 
-        <div style={{ marginTop: 4 }}>
-          <span className={ui.fieldLabel}>{t('iAm')}</span>
-          <ChipGroup<UserRole>
-            label={t('iAm')}
-            fill
-            value={session.role}
-            options={[
-              { value: 'employee', label: t('empRole') },
-              { value: 'manager', label: t('mgrRole') },
-            ]}
-            onChange={(role) => dispatch({ type: 'setRole', role })}
-          />
-        </div>
+        {/* The role chips are the demo's: they decide which sample account
+            the local sign-in creates. A real account has no role until it
+            joins or creates a workplace, so they are not shown there. */}
+        {real ? null : (
+          <div style={{ marginTop: 4 }}>
+            <span className={ui.fieldLabel}>{t('iAm')}</span>
+            <ChipGroup<UserRole>
+              label={t('iAm')}
+              fill
+              value={session.role}
+              options={[
+                { value: 'employee', label: t('empRole') },
+                { value: 'manager', label: t('mgrRole') },
+              ]}
+              onChange={(role) => dispatch({ type: 'setRole', role })}
+            />
+          </div>
+        )}
 
         <Note>{t('termsNote')}</Note>
       </div>

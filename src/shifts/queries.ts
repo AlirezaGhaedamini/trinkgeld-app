@@ -54,12 +54,21 @@ export async function fetchReviewQueue(
   client: TipCrewClient,
   membership: Membership,
   statuses: readonly ('draft' | 'submitted' | 'approved' | 'rejected')[] = ['submitted'],
+  /**
+   * Business days to confine the queue to. The distribution wizard asks for
+   * the pool's own period, so the hours it shows are the hours the engine
+   * will read; the standalone review screen asks for everything.
+   */
+  period?: { start: string; end: string },
 ): Promise<Shift[]> {
-  const { data: shiftRows, error } = await client
+  let query = client
     .from('shifts')
     .select('*')
     .eq('workplace_id', membership.workplaceId)
-    .in('status', [...statuses])
+    .in('status', [...statuses]);
+  if (period) query = query.gte('work_date', period.start).lte('work_date', period.end);
+
+  const { data: shiftRows, error } = await query
     .order('work_date', { ascending: false })
     .order('starts_at', { ascending: true })
     .limit(200);

@@ -10,6 +10,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { useWorkplace } from '@/hooks/useWorkplace';
 import { WORKPLACE_FAILURE_KEY } from '@/workplace/errors';
+import { clearPendingJoin, readPendingJoin, writePendingJoin } from '@/workplace/pendingJoin';
 import { initialsOf } from '@/data/employees';
 import ui from '@/components/ui/ui.module.css';
 import styles from '@/pages/pages.module.css';
@@ -60,6 +61,25 @@ export function JoinWorkplacePage() {
   const fail = (key: keyof typeof WORKPLACE_FAILURE_KEY) => show(t(WORKPLACE_FAILURE_KEY[key]));
 
   /**
+   * A request sent from this device is remembered, so a refresh keeps saying
+   * "sent, waiting for approval" instead of showing an empty field again. The
+   * note ends when a membership arrives, when another code is typed, or at
+   * sign-out. There is no polling: the person reopens the app once approved.
+   */
+  useEffect(() => {
+    if (!real) return;
+    const pending = readPendingJoin();
+    if (!pending) return;
+    if (workplace.memberships.length > 0) {
+      clearPendingJoin();
+      setRequested(false);
+      return;
+    }
+    dispatch({ type: 'setJoinCode', code: pending.code });
+    setRequested(true);
+  }, [real, workplace.memberships.length, dispatch]);
+
+  /**
    * An invitation link lands here as `#/join?token=…`. The token is 64 hex
    * characters, so it can never be typed into the six-cell code field — which
    * is exactly why it arrives by URL instead.
@@ -90,12 +110,14 @@ export function JoinWorkplacePage() {
       navigate('/home', { replace: true });
       return;
     }
+    if (workplace.busy) return;
     const result = await workplace.joinWithCode(code);
     if (!result.ok) {
       fail(result.failure ?? 'invalidCode');
       return;
     }
     // request_join() files a request; there is no membership yet.
+    writePendingJoin(code);
     setRequested(true);
     show(t('wpRequestSent'));
   };
@@ -107,6 +129,7 @@ export function JoinWorkplacePage() {
       navigate('/manager', { replace: true });
       return;
     }
+    if (workplace.busy) return;
     const result = await workplace.createWorkplace(newName);
     if (!result.ok) {
       fail(result.failure ?? 'createFailed');
@@ -137,7 +160,23 @@ export function JoinWorkplacePage() {
     >
       <Lede>{t('askCode')}</Lede>
 
-      {requested ? <InfoNote icon="hourglass-medium">{t('wpRequestPending')}</InfoNote> : null}
+      {requested ? (
+        <>
+          <InfoNote icon="hourglass-medium">
+            {t('wpRequestPending')} {t('wpRequestPendingRefresh')}
+          </InfoNote>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              clearPendingJoin();
+              setRequested(false);
+              dispatch({ type: 'setJoinCode', code: '' });
+            }}
+          >
+            {t('wpRequestReset')}
+          </Button>
+        </>
+      ) : null}
 
       <div className={styles.codeField}>
         <input
@@ -147,6 +186,7 @@ export function JoinWorkplacePage() {
           onChange={(event) => {
             // Editing the code means trying again, so the "waiting for approval"
             // state clears and the button comes back.
+            clearPendingJoin();
             setRequested(false);
             dispatch({
               type: 'setJoinCode',

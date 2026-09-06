@@ -121,6 +121,9 @@ export function AppRoutes() {
               <Route path="/manager/new/hours" element={<HoursReviewPage mode="wizard" />} />
               <Route path="/manager/new/result" element={<WizardResultPage />} />
               <Route path="/manager/sent" element={<SentPage />} />
+              {/* The real confirmation names the night it is about, so a
+                  refresh reads the same record instead of a memory. */}
+              <Route path="/manager/sent/:distributionId" element={<SentPage />} />
               <Route path="/manager/hours" element={<HoursReviewPage mode="review" />} />
               <Route path="/manager/overlap" element={<OverlapPage />} />
               <Route path="/manager/rules/areas" element={<AreasPage />} />

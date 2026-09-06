@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { Button } from '@/components/ui/Button';
@@ -16,6 +17,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { useShiftLabel } from '@/hooks/useShiftLabel';
 import { useWorkplace } from '@/hooks/useWorkplace';
 import { useDashboard } from '@/dashboard/useDashboard';
+import { useRules } from '@/rules/useRules';
 import { attentionCount, type DashboardRecent, type PoolState } from '@/dashboard/types';
 import { DASHBOARD_FAILURE_KEY } from '@/dashboard/errors';
 import { PAYOUT_STATE_LABEL } from '@/distribution/ack';
@@ -116,6 +118,62 @@ function RealDashboard({ dashboard }: { dashboard: ReturnType<typeof useDashboar
     ? latest.pendingPeople + latest.queriedPeople + latest.openQuestions > 0
     : false;
 
+  /* ── first run ────────────────────────────────────────────────────────────
+     Four things make the first distribution possible, and two of them are
+     settings a new workplace does not have: an active rule, and somebody in
+     an area the rule pays. Both are read from the rules hook the settings
+     screens already use; the two nightly items come from the overview RPC.
+     The card stays while the durable pair is missing and then leaves for
+     good — from then on the Tonight card carries the nightly items. Nothing
+     is shown while the check is still loading. */
+  const rules = useRules();
+  const setup = useMemo(() => {
+    if (!d || rules.status !== 'ready' || !rules.state) return null;
+    const active = rules.state.active;
+    /* The areas the rule in force actually pays: pool-eligible and above 0%
+       on the ACTIVE version. Without an active rule nothing is paid yet, so
+       nobody counts as placed, whatever area they hold. */
+    const paid = new Set(
+      (active?.shares ?? [])
+        .filter((s) => s.isPoolEligible && s.percentage > 0)
+        .map((s) => s.areaId),
+    );
+    /* The manager who set the workplace up never satisfies "the team": this
+       row is about somebody else being on the roster where the tips go. */
+    const self = membership?.id ?? null;
+    const members = rules.state.members;
+    return {
+      rulesActive: active !== null,
+      teamAssigned: members.some(
+        (m) =>
+          m.role !== 'manager' &&
+          m.memberId !== self &&
+          m.areaId !== null &&
+          paid.has(m.areaId),
+      ),
+      withoutArea: members.filter((m) => m.areaId === null).length,
+      hoursDone: d.tonight.approvedPeople > 0,
+      tipsDone: d.tonight.reportsCount > 0 || d.tonight.pool !== null,
+    };
+  }, [d, rules.status, rules.state, membership]);
+  const showSetup =
+    d !== null &&
+    (rules.status === 'error' || (setup !== null && !(setup.rulesActive && setup.teamAssigned)));
+  const setupRows = setup
+    ? [
+        { key: 'rules', done: setup.rulesActive, title: t('frRules'), hint: t('frRulesHint'), to: '/manager/rules' },
+        {
+          key: 'team',
+          done: setup.teamAssigned,
+          title: t('frTeam'),
+          hint: setup.withoutArea > 0 ? n('frTeamMissing', setup.withoutArea) : t('frTeamHint'),
+          to: '/manager/team',
+        },
+        { key: 'hours', done: setup.hoursDone, title: t('frHours'), hint: t('frHoursHint'), to: '/manager/hours' },
+        { key: 'tips', done: setup.tipsDone, title: t('frTips'), hint: t('frTipsHint'), to: '/manager/new/pool' },
+      ]
+    : [];
+
   const recentRows: HistoryRowData[] = (d?.recent ?? []).map((row: DashboardRecent) => ({
     id: row.id,
     date: onDate(row.periodStart),
@@ -163,6 +221,47 @@ function RealDashboard({ dashboard }: { dashboard: ReturnType<typeof useDashboar
               onClick={() => navigate(to)}
             />
           ))}
+        </Card>
+      ) : null}
+
+      {showSetup ? (
+        <Card padding="padded">
+          <p className={ui.inline} style={{ fontSize: 12, color: 'var(--color-accent)' }}>
+            <Icon name="check-circle" size={15} />
+            {t('frTitle')}
+          </p>
+          <p className={ui.note}>{t('frBody')}</p>
+          {setup === null ? (
+            <ListRow
+              inset
+              chevron
+              title={t('frCheckFailed')}
+              meta={t('retry')}
+              onClick={() => void rules.refresh()}
+            />
+          ) : (
+            setupRows.map((row) =>
+              row.done ? (
+                <ListRow
+                  key={row.key}
+                  inset
+                  title={row.title}
+                  meta={t('done')}
+                  leading={<Icon name="check-circle" fill size={18} color="var(--color-accent)" />}
+                />
+              ) : (
+                <ListRow
+                  key={row.key}
+                  inset
+                  chevron
+                  title={row.title}
+                  meta={row.hint}
+                  leading={<Icon name="check-circle" size={18} color="var(--color-text-faint)" />}
+                  onClick={() => navigate(row.to)}
+                />
+              ),
+            )
+          )}
         </Card>
       ) : null}
 

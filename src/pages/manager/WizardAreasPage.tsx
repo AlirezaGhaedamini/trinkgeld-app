@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icon';
@@ -63,6 +64,7 @@ export function WizardAreasPage() {
       navigate('/manager/new/hours');
       return;
     }
+    if (wizard.busy) return;
     const payload = (wizard.rule?.shares ?? []).map((s) => ({
       areaId: s.areaId,
       areaKey: s.areaKey,
@@ -85,6 +87,40 @@ export function WizardAreasPage() {
     : allocated < 100
       ? `${percent(100 - allocated)} ${t('hintUnder')}`
       : `${percent(allocated - 100)} ${t('hintOver')}`;
+
+  /* ── the rule gate ───────────────────────────────────────────────────────
+     A new workplace has a draft rule at 0% and no active one, and nothing can
+     be divided until a version is in force. Saying so here, with the way to
+     the rules screen, replaces the empty list and muted button this step
+     used to show in that state. Loading and failure are told apart from it,
+     so a slow network never reads as "no rules". */
+  if (real && !wizard.rule) {
+    if (wizard.status === 'error') {
+      return (
+        <Screen title={t('areaSplit')} kicker={`${t('step')} 2/4`}>
+          <EmptyState title={t('loadFailed')} />
+          <Button variant="secondary" block onClick={() => void wizard.refresh()}>
+            {t('retry')}
+          </Button>
+        </Screen>
+      );
+    }
+    if (wizard.status !== 'ready') {
+      return (
+        <Screen title={t('areaSplit')} kicker={`${t('step')} 2/4`}>
+          <EmptyState title={t('dLoading')} />
+        </Screen>
+      );
+    }
+    return (
+      <Screen title={t('areaSplit')} kicker={`${t('step')} 2/4`}>
+        <EmptyState title={t('wizNoRuleTitle')}>{t('wizNoRuleBody')}</EmptyState>
+        <Button block onClick={() => navigate('/manager/rules')}>
+          {t('wizNoRuleCta')}
+        </Button>
+      </Screen>
+    );
+  }
 
   return (
     <Screen

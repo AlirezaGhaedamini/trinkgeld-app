@@ -18,6 +18,7 @@ import { useToast } from '@/hooks/useToast';
 import { RULE_FAILURE_KEY } from '@/rules/errors';
 import { useRules } from '@/rules/useRules';
 import {
+  METHOD_LABEL,
   METHODS as REAL_METHODS,
   SUPPORTED_BASES,
   allocated as sumShares,
@@ -34,12 +35,8 @@ import styles from '@/pages/pages.module.css';
 
 const METHODS: DistributionMethod[] = ['mPoints', 'mHours', 'mEqual'];
 
-/** The real enum → the copy keys the prototype already ships. */
-const METHOD_KEY: Record<RuleMethod, StringKey> = {
-  hours_points: 'mPoints',
-  hours: 'mHours',
-  equal: 'mEqual',
-};
+/* The method's own label lives with the rule types (METHOD_LABEL), so the
+   wizard and the sent confirmation say the same words as this screen. */
 const METHOD_NOTE_KEY: Record<RuleMethod, StringKey> = {
   hours_points: 'mPointsD',
   hours: 'mHoursD',
@@ -227,7 +224,7 @@ function RealRules() {
             {' · '}
             {active.minOverlapMinutes} {t('minutesShort')}
             {' · '}
-            {t(METHOD_KEY[active.method])}
+            {t(METHOD_LABEL[active.method])}
           </p>
         ) : (
           <p className={ui.rowMeta} style={{ marginTop: 4 }}>
@@ -382,7 +379,7 @@ function RealRules() {
             >
               <RadioDot on={method === option} />
               <span className={ui.rowMain}>
-                <span className={ui.rowTitle}>{t(METHOD_KEY[option])}</span>
+                <span className={ui.rowTitle}>{t(METHOD_LABEL[option])}</span>
                 <span className={ui.rowMeta} style={{ display: 'block', marginTop: 2 }}>
                   {t(METHOD_NOTE_KEY[option])}
                 </span>
