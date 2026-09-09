@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
+import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
-import { Card } from '@/components/ui/Card';
+import { Card, CardButton } from '@/components/ui/Card';
 import { ChipGroup } from '@/components/ui/ChipGroup';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Icon } from '@/components/ui/Icon';
+import { ListRow } from '@/components/ui/ListRow';
 import { InfoNote, Note } from '@/components/ui/Note';
 import { RadioDot } from '@/components/ui/RadioDot';
 import { SectionLabel } from '@/components/ui/SectionLabel';
@@ -13,8 +15,10 @@ import { Toggle } from '@/components/ui/Toggle';
 import { AREA_ORDER, iconForAreaKey } from '@/data/areas';
 import { MIN_OVERLAP_CHOICES } from '@/data/workplace';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
+import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
+import { useWorkplace } from '@/hooks/useWorkplace';
 import { RULE_FAILURE_KEY } from '@/rules/errors';
 import { useRules } from '@/rules/useRules';
 import {
@@ -72,6 +76,8 @@ function RealRules() {
   const { t, num, percent, language } = useI18n();
   const { show } = useToast();
   const navigate = useNavigate();
+  const auth = useAuth();
+  const membership = useWorkplace().activeMembership;
 
   const state = rules.state;
   const active = state?.active ?? null;
@@ -199,6 +205,32 @@ function RealRules() {
       aboveTabs
       cta={rules.status === 'ready' ? cta : undefined}
     >
+      {/* ── the manager's own account ───────────────────────────────────── */}
+      {/* An employee has a "You" tab; a manager's four tabs belong to the
+          workplace. This card is the manager's door to the shared profile
+          screen — language, the workplace chooser, sign out — and it sits
+          first on this tab, where the employee's identity block sits on
+          theirs, so it is found rather than searched for. */}
+      {membership ? (
+        <CardButton padding="padded" onClick={() => navigate('/profile')}>
+          <span className={ui.inline}>
+            <Avatar name={membership.displayName} size={44} tinted />
+            <span className={ui.rowMain}>
+              <span
+                className={`${ui.rowTitle} ${ui.rowTitleStrong} ${ui.truncate}`}
+                style={{ display: 'block' }}
+              >
+                {membership.displayName}
+              </span>
+              <span className={`${ui.rowMeta} ${ui.truncate}`} style={{ display: 'block' }}>
+                {auth.email ? `${t('mgrRole')} · ${auth.email}` : t('mgrRole')}
+              </span>
+            </span>
+            <Icon name="caret-right" size={13} color="var(--color-text-subtle)" />
+          </span>
+        </CardButton>
+      ) : null}
+
       {/* ── which version is in force ───────────────────────────────────── */}
       <Card padding="padded">
         <div className={ui.spread}>
@@ -474,26 +506,26 @@ function RealRules() {
           <span className={ui.rowValue}>{state?.settings.timezone ?? '—'}</span>
           <Icon name="caret-right" size={13} className={ui.chevron} />
         </button>
-        <button
-          type="button"
-          className={`${ui.insetRow} ${ui.insetRowInteractive}`}
-          onClick={() => navigate('/manager/rules/period')}
-        >
-          <span className={`${ui.rowMain} ${ui.rowTitle}`}>{t('pcHubRow')}</span>
-          <Icon name="caret-right" size={13} className={ui.chevron} />
-        </button>
-        {/* The manager's own account — language, workplace chooser, sign
-            out — lives on the shared profile screen. This is its one door
-            from the manager tabs, so it is reachable on a phone. */}
-        <button
-          type="button"
-          className={`${ui.insetRow} ${ui.insetRowInteractive}`}
-          onClick={() => navigate('/profile')}
-        >
-          <span className={`${ui.rowMain} ${ui.rowTitle}`}>{t('pfAccount')}</span>
-          <Icon name="caret-right" size={13} className={ui.chevron} />
-        </button>
       </Card>
+
+      {/* ── the books ────────────────────────────────────────────────────── */}
+      {/* Closing a period and taking the figures away is not a rule, and while
+          it sat as the last row of the card above — the only row there with no
+          value beside it — a manager testing the real app did not find it at
+          all. Its own heading is the whole fix: same primitives, same
+          spacing, one screen earlier in the eye's path. */}
+      <div className={ui.stackTight}>
+        <SectionLabel>{t('pcRecordsHead')}</SectionLabel>
+        <Card padding="none" clip>
+          <ListRow
+            inset
+            title={t('pcHubRow')}
+            meta={t('pcHubRowBody')}
+            chevron
+            onClick={() => navigate('/manager/rules/period')}
+          />
+        </Card>
+      </div>
     </Screen>
   );
 }

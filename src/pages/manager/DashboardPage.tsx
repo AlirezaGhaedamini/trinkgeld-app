@@ -20,8 +20,7 @@ import { useDashboard } from '@/dashboard/useDashboard';
 import { useRules } from '@/rules/useRules';
 import { attentionCount, type DashboardRecent, type PoolState } from '@/dashboard/types';
 import { DASHBOARD_FAILURE_KEY } from '@/dashboard/errors';
-import { PAYOUT_STATE_LABEL } from '@/distribution/ack';
-import type { DistributionStatus } from '@/distribution/types';
+import { DISTRIBUTION_STATUS_LABEL, PAYOUT_STATE_LABEL } from '@/distribution/ack';
 import type { StringKey } from '@/i18n/strings';
 import { centsToAmount } from '@/lib/money';
 import { pendingDistribution, reportsTotalCents, submissionCount } from '@/state/selectors';
@@ -43,13 +42,6 @@ export function DashboardPage() {
   const dashboard = useDashboard();
   return dashboard.enabled ? <RealDashboard dashboard={dashboard} /> : <DemoDashboard />;
 }
-
-const DIST_STATUS_LABEL: Record<DistributionStatus, StringKey> = {
-  draft: 'dDraftLabel',
-  sent: 'dSentLabel',
-  confirmed: 'dConfirmedLabel',
-  cancelled: 'dCancelledLabel',
-};
 
 const POOL_STATE_LABEL: Record<PoolState, StringKey> = {
   open: 'dbPoolOpen',
@@ -181,7 +173,7 @@ function RealDashboard({ dashboard }: { dashboard: ReturnType<typeof useDashboar
     amount: money(centsToAmount(row.entitlementCents)),
     status: row.isCorrection && row.status !== 'draft'
       ? t('corrCorrected')
-      : t(DIST_STATUS_LABEL[row.status]),
+      : t(DISTRIBUTION_STATUS_LABEL[row.status]),
     statusColor: row.status === 'draft' ? 'var(--color-accent)' : 'var(--color-text-subtle)',
     chip: undefined,
     onOpen: () => navigate(`/manager/distributions/${row.id}`),
@@ -351,7 +343,7 @@ function RealDashboard({ dashboard }: { dashboard: ReturnType<typeof useDashboar
                     d.tonight.distribution
                       ? d.tonight.distribution.isCorrection && d.tonight.distribution.status !== 'draft'
                         ? t('corrCorrected')
-                        : t(DIST_STATUS_LABEL[d.tonight.distribution.status])
+                        : t(DISTRIBUTION_STATUS_LABEL[d.tonight.distribution.status])
                       : '',
                   ]
                     .filter(Boolean)
@@ -391,7 +383,7 @@ function RealDashboard({ dashboard }: { dashboard: ReturnType<typeof useDashboar
                 <p className={`${ui.rowTitle} ${ui.rowTitleStrong}`}>{onDate(latest.periodStart)}</p>
                 <p className={ui.noteBody} style={{ marginTop: 2 }}>
                   {money(centsToAmount(latest.entitlementCents))} · {people(latest.peopleCount)} ·{' '}
-                  {t(DIST_STATUS_LABEL[latest.status])}
+                  {t(DISTRIBUTION_STATUS_LABEL[latest.status])}
                 </p>
                 <p className={ui.noteBody} style={{ marginTop: 2 }}>
                   {latest.acknowledgementRequired
@@ -447,12 +439,18 @@ function RealDashboard({ dashboard }: { dashboard: ReturnType<typeof useDashboar
             chevron
             onClick={() => navigate('/manager/distributions')}
           />
+          {/* Titled for where it GOES, not for what it reports. It read as a
+              statistic — "Last close · No period closed yet" — and a manager
+              testing the real app never took it for a way in. The state it
+              carries is still the useful part, so it moves to the meta line. */}
           <ListRow
             inset
-            title={t('dbLastClose')}
+            title={t('pcHubShortcut')}
             meta={
               d.close
-                ? `${onDate(d.close.periodStart)} – ${onDate(d.close.periodEnd)}`
+                ? t('dbLastClosedRange')
+                    .replace('{from}', onDate(d.close.periodStart))
+                    .replace('{to}', onDate(d.close.periodEnd))
                 : t('dbNoClose')
             }
             chevron

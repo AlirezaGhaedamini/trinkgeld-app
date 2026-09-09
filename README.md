@@ -395,6 +395,21 @@ The database is in `supabase/migrations/` and documented in
 - Employees have no read access to `tip_pools` or `tip_distributions`. They read
   `member_distributions` and `member_distribution_entries`, which mask the pool
   total unless the workplace releases it.
+- The financial lifecycle is RPC-only. A client can never UPDATE
+  `tip_distributions`, and can move a pool only by calculating, sending,
+  cancelling or `void_pool()` — a raw PATCH is refused by the database, not by
+  the screen (migration 33).
+- "Published" means `sent_at` exists. An employee's history shows only versions
+  that were actually sent; a draft that was never sent is nobody's history.
+- A pool with a wrong total is recovered by discarding the draft, voiding the
+  pool and pooling the reports again. The current business day comes from
+  `current_business_day()`, the server's answer, not the device clock.
+- A shift the manager sends back notifies its own member and nobody else
+  (migrations 34–35). The notification carries the business date, never the
+  note; the note is read from the shift itself when `#/hours?shift=<id>`
+  opens it. Correcting and resubmitting is the employee UPDATE policy from
+  migration 8 — there is no resubmit RPC — and a second rejection re-arms the
+  same inbox row instead of adding another.
 
 ### Connecting a project
 

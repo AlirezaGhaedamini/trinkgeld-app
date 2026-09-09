@@ -54,6 +54,10 @@ export type DistributionFailure =
   | 'periodClosed'
   | 'periodNotReady'
   | 'periodDates'
+  | 'poolHasDistribution'
+  | 'poolDistributed'
+  | 'draftGone'
+  | 'discardFailed'
   | 'network'
   | 'notConfigured'
   | 'unknown';
@@ -105,6 +109,10 @@ export const DISTRIBUTION_FAILURE_KEY: Record<DistributionFailure, StringKey> = 
   periodClosed: 'pcErrClosed',
   periodNotReady: 'pcErrNotReady',
   periodDates: 'pcErrDates',
+  poolHasDistribution: 'dErrPoolHasDistribution',
+  poolDistributed: 'dErrPoolDistributed',
+  draftGone: 'dErrDiscard',
+  discardFailed: 'dErrDiscard',
   network: 'authNetwork',
   notConfigured: 'authNotConfigured',
   unknown: 'authUnknown',
@@ -172,6 +180,12 @@ export function classifyDistributionError(error: unknown): DistributionFailure {
 
   if (message.includes('recalculate before sending')) return 'stale';
   if (message.includes('only a draft can be sent')) return 'alreadySent';
+  // Migration 33: void_pool() and the discard path. Before the generic 42501
+  // rule, which would read every one of these as "you are not a manager".
+  if (message.includes('this pool has a distribution')) return 'poolHasDistribution';
+  if (message.includes('this pool has been distributed')) return 'poolDistributed';
+  if (message.includes('settled money behind it')) return 'poolDistributed';
+  if (message.includes('draft not found')) return 'draftGone';
   if (message.includes('overlap model is not implemented')) return 'unsupportedBasis';
   if (message.includes('must total exactly 100')) return 'sharesNot100';
   if (message.includes('no eligible hours in')) return 'emptyArea';

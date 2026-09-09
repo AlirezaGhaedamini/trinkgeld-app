@@ -14,7 +14,12 @@
  */
 
 import type { StringKey } from '@/i18n/strings';
-import type { PayoutMethod, PayoutStatus, ReversalReason } from '@/distribution/types';
+import type {
+  DistributionStatus,
+  PayoutMethod,
+  PayoutStatus,
+  ReversalReason,
+} from '@/distribution/types';
 import type { AckStatus, DistributionEntry } from '@/distribution/types';
 
 /**
@@ -271,7 +276,7 @@ export function lineageOf(d: {
  * to the id it was given when there is no successor, which is the common case.
  */
 export function lineageHeadId(
-  rows: Array<{ id: string; supersededBy: string | null }>,
+  rows: ReadonlyArray<{ id: string; supersededBy: string | null }>,
   startId: string,
 ): string {
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -464,6 +469,29 @@ export const REVERSAL_REASON_LABEL: Record<ReversalReason, StringKey> = {
 };
 
 export const REVERSAL_NOTE_MAX = 500;
+
+/**
+ * A distribution's own status, and an entry's acknowledgement.
+ *
+ * Both were spelled out on the screens that happened to need them — the status
+ * privately inside DashboardPage, the acknowledgement nowhere at all, because
+ * until the export nothing had to render `entry_ack_status` as a word. They sit
+ * here with the other database-enum maps so the dashboard, the export and
+ * anything after them cannot drift into three different translations of the
+ * same row.
+ */
+export const DISTRIBUTION_STATUS_LABEL: Record<DistributionStatus, StringKey> = {
+  draft: 'dDraftLabel',
+  sent: 'dSentLabel',
+  confirmed: 'dConfirmedLabel',
+  cancelled: 'dCancelledLabel',
+};
+
+export const ACK_STATUS_LABEL: Record<AckStatus, StringKey> = {
+  pending: 'ackRowPending',
+  acknowledged: 'ackRowConfirmed',
+  queried: 'ackRowQueried',
+};
 
 /** What a payout state should say on screen, for either side. */
 export const PAYOUT_STATE_LABEL: Record<PayoutStatus, StringKey> = {

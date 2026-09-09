@@ -44,6 +44,31 @@ export async function fetchOwnShifts(
 }
 
 /**
+ * One of the signed-in member's own shifts, by id — the one a notification or
+ * a row in the log named. Null when there is no such row for THIS member in
+ * THIS workplace: the select policy already limits an employee to their own
+ * rows, and the two filters here keep a manager, who may read the whole
+ * workplace, from opening a colleague's shift in a form that would then try
+ * to write it as their own.
+ */
+export async function fetchOwnShift(
+  client: TipCrewClient,
+  membership: Membership,
+  shiftId: string,
+): Promise<Shift | null> {
+  const { data, error } = await client
+    .from('shifts')
+    .select('*')
+    .eq('id', shiftId)
+    .eq('workplace_id', membership.workplaceId)
+    .eq('member_id', membership.id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? toShift(data, membership.workplace.timezone) : null;
+}
+
+/**
  * Shifts awaiting review in the active workplace, with the member's name and
  * the effective area attached.
  *

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { Button } from '@/components/ui/Button';
 import { useI18n } from '@/hooks/useI18n';
+import { useTabsPresent } from '@/components/layout/tabsContext';
 import styles from '@/components/layout/layout.module.css';
 
 export interface ScreenAction {
@@ -28,7 +29,11 @@ interface ScreenProps {
     noteColor?: string;
     secondary?: { label: string; onClick: () => void };
   };
-  /** True when a tab bar follows, so the CTA bar drops its safe-area padding. */
+  /**
+   * True when a tab bar follows, so the CTA bar drops its safe-area padding
+   * and the body drops the room it reserves when nothing follows it.
+   * Defaults to what the layout says, which is the only thing that knows.
+   */
   aboveTabs?: boolean;
   center?: boolean;
   children: ReactNode;
@@ -48,12 +53,16 @@ export function Screen({
   back = 'arrow',
   action,
   cta,
-  aboveTabs = false,
+  aboveTabs,
   center = false,
   children,
 }: ScreenProps) {
   const navigate = useNavigate();
   const { t } = useI18n();
+  /* The layout that draws the bar is the authority; the prop is an override
+     for a screen that has to disagree with it. */
+  const tabsPresent = useTabsPresent();
+  const tabsBelow = aboveTabs ?? tabsPresent;
 
   return (
     <>
@@ -89,7 +98,7 @@ export function Screen({
           styles.body,
           'app-scroll',
           center ? styles.bodyCentered : '',
-          !cta && !aboveTabs ? styles.bodyLoose : '',
+          !cta && !tabsBelow ? styles.bodyLoose : '',
         ]
           .filter(Boolean)
           .join(' ')}
@@ -98,7 +107,7 @@ export function Screen({
       </div>
 
       {cta ? (
-        <div className={`${styles.ctaBar} ${aboveTabs ? styles.ctaBarAboveTabs : ''}`}>
+        <div className={`${styles.ctaBar} ${tabsBelow ? styles.ctaBarAboveTabs : ''}`}>
           {cta.note ? (
             <p className={styles.ctaNote} style={{ color: cta.noteColor ?? 'var(--color-text-muted)' }}>
               {cta.note}

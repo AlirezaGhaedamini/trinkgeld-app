@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -36,6 +37,7 @@ function isoDate(d: Date): string {
  */
 export function PeriodClosePage() {
   const { t, money, day } = useI18n();
+  const navigate = useNavigate();
   const { show } = useToast();
   const period = usePeriodClose();
 
@@ -47,6 +49,12 @@ export function PeriodClosePage() {
   const [data, setData] = useState<PeriodExport | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  /* Closing a period is a workflow that ENDS, and a finished workflow should
+     say where to go next rather than leave the manager to find their own way
+     out. The tab bar is under this screen too, so this is not the only exit —
+     it is the one that belongs to the thing just completed. Set on success and
+     left up; nothing navigates on its own. */
+  const [closed, setClosed] = useState(false);
   const [note, setNote] = useState('');
 
   /* A changed date means the answer on screen is about a period nobody asked
@@ -86,6 +94,7 @@ export function PeriodClosePage() {
     setConfirming(false);
     setNote('');
     show(t('pcClosed'));
+    setClosed(true);
     void check();
   };
 
@@ -98,7 +107,7 @@ export function PeriodClosePage() {
    */
   const download = () => {
     if (!data) return;
-    const blob = new Blob([buildCsv(data)], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([buildCsv(data, t)], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -127,7 +136,18 @@ export function PeriodClosePage() {
     : [];
 
   return (
-    <Screen title={t('pcTitle')}>
+    <Screen
+      title={t('pcTitle')}
+      cta={
+        closed
+          ? {
+              label: t('backToOverview'),
+              onClick: () => navigate('/manager'),
+              note: t('pcClosed'),
+            }
+          : undefined
+      }
+    >
       <Note>{t('pcIntro')}</Note>
 
       <Card padding="padded">

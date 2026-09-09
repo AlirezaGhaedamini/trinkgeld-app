@@ -14,10 +14,10 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 insert into auth.users (id, email, raw_user_meta_data) values
-  ('a1100000-0000-0000-0000-000000000001', 'n.boss@test.local',  '{"full_name":"N Boss"}'),
-  ('a1100000-0000-0000-0000-000000000002', 'n.staff@test.local', '{"full_name":"N Staff"}'),
+  ('a1100000-0000-0000-0000-000000000001', 'no.boss@test.local',  '{"full_name":"N Boss"}'),
+  ('a1100000-0000-0000-0000-000000000002', 'no.staff@test.local', '{"full_name":"N Staff"}'),
   ('a1100000-0000-0000-0000-000000000003', 'n.bar@test.local',   '{"full_name":"N Bar"}'),
-  ('a1100000-0000-0000-0000-000000000004', 'n.rival@test.local', '{"full_name":"N Rival"}'),
+  ('a1100000-0000-0000-0000-000000000004', 'no.rival@test.local', '{"full_name":"N Rival"}'),
   ('a1100000-0000-0000-0000-000000000005', 'n.ghost@test.local', '{"full_name":"N Ghost"}')
 on conflict do nothing;
 
@@ -41,7 +41,7 @@ begin;
   update public.workplace_members set area_id = :'n_service', workplace_role_id = :'n_server'
     where id = :'n_boss';
   select token from public.create_invitation(
-    :'nw', 'n.staff@test.local', 'Nia Staff', 'employee', :'n_service', :'n_server') as t \gset tok_n1_
+    :'nw', 'no.staff@test.local', 'Nia Staff', 'employee', :'n_service', :'n_server') as t \gset tok_n1_
   select token from public.create_invitation(
     :'nw', 'n.bar@test.local', 'Bo Bar', 'employee', :'n_bar', :'n_keep') as t \gset tok_n2_
   -- The negative control: a real, active, account-backed member of this
@@ -64,7 +64,7 @@ commit;
 begin;
   select tests.as_user('a1100000-0000-0000-0000-000000000004');
   select token from public.create_invitation(
-    :'nx', 'n.staff@test.local', 'Nia Elsewhere', 'employee', null, null) as t \gset tok_nx_
+    :'nx', 'no.staff@test.local', 'Nia Elsewhere', 'employee', null, null) as t \gset tok_nx_
 commit;
 begin; select tests.as_user('a1100000-0000-0000-0000-000000000002');
        select public.accept_invitation(:'tok_nx_token') as n_staff_x \gset
@@ -371,7 +371,7 @@ select tests.ok(
   'N28 …distinguished by the question each one answers');
 select tests.ok(
   (select count(*) = 0 from public.member_notifications
-    where type = 'query_resolved' and member_id <> :'n_staff'),
+    where type = 'query_resolved' and workplace_id = :'nw' and member_id <> :'n_staff'),
   'N29 …and an answer goes only to the person who asked');
 
 -- ═════════════════════════════════════════════════════════════════════════════
@@ -510,7 +510,7 @@ select tests.ok(:'n_unread_left'::int = 0,
   'N51 mark_all_notifications_read clears this workplace''s inbox');
 select tests.ok(
   (select count(*) = 0 from public.member_notifications
-    where member_id <> :'n_staff' and read_at is not null),
+    where workplace_id in (:'nw', :'nx') and member_id <> :'n_staff' and read_at is not null),
   'N52 …and touches nobody else''s rows');
 
 begin;

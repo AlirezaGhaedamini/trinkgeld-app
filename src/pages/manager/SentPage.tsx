@@ -47,10 +47,16 @@ function RealSent({ id, detail }: { id: string; detail: ReturnType<typeof useDis
   return (
     <Screen
       back={false}
+      /* The workflow is over, so the primary action is the way out of it.
+         Looking at what was just sent is the optional second step, not the
+         one the manager has to take to escape the wizard they came through. */
       cta={{
-        label: t('viewDist'),
-        onClick: () => navigate(`/manager/distributions/${id}`, { replace: true }),
-        secondary: { label: t('done'), onClick: () => navigate('/manager', { replace: true }) },
+        label: t('backToOverview'),
+        onClick: () => navigate('/manager', { replace: true }),
+        secondary: {
+          label: t('viewDist'),
+          onClick: () => navigate(`/manager/distributions/${id}`, { replace: true }),
+        },
       }}
     >
       <div className={styles.sent}>
@@ -110,9 +116,12 @@ function DemoSent() {
     <Screen
       back={false}
       cta={{
-        label: t('viewDist'),
-        onClick: () => navigate(`/manager/distributions/${sent?.id ?? ''}`, { replace: true }),
-        secondary: { label: t('done'), onClick: () => navigate('/manager', { replace: true }) },
+        label: t('backToOverview'),
+        onClick: () => navigate('/manager', { replace: true }),
+        secondary: {
+          label: t('viewDist'),
+          onClick: () => navigate(`/manager/distributions/${sent?.id ?? ''}`, { replace: true }),
+        },
       }}
     >
       <div className={styles.sent}>

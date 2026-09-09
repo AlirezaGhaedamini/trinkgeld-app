@@ -96,6 +96,23 @@ export interface ShiftDraft {
 export const MIN_SHIFT_MINUTES = 15;
 export const MAX_BREAK_MINUTES = 720;
 
+/**
+ * A typed end time, placed on the right side of midnight.
+ *
+ * The form keeps the end as minutes from the START's midnight, so an end
+ * after midnight is 1440 plus the wall-clock value: 18:00 → 02:00 is 1080 →
+ * 1560. A person types the wall clock ("02:00"); this decides which night it
+ * belongs to. An end at or before the start is the following morning — an
+ * 18:00 → 18:00 entry is then a 24-hour span, which validateDraft() refuses
+ * rather than reading it as zero.
+ */
+export function endMinutesFor(startMinutes: number | null, wallClockEnd: number): number {
+  const wall = ((wallClockEnd % 1440) + 1440) % 1440;
+  if (startMinutes === null) return wall;
+  const start = ((startMinutes % 1440) + 1440) % 1440;
+  return wall > start ? wall : wall + 1440;
+}
+
 export type ShiftValidation =
   | { ok: true; spanMinutes: number; workedMinutes: number }
   | { ok: false; reason: 'noStart' | 'noEnd' | 'tooShort' | 'tooLong' | 'badBreak' | 'breakTooLong' };

@@ -17,7 +17,7 @@ import { toNotification, type AppNotification } from '@/notifications/types';
 
 /** One literal, not a concatenation: supabase-js can only type a select it can see. */
 const COLUMNS =
-  'id,workplace_id,member_id,type,distribution_id,query_id,payout_id,reversal_id,payload,created_at,read_at';
+  'id,workplace_id,member_id,type,distribution_id,query_id,payout_id,reversal_id,shift_id,payload,created_at,read_at';
 
 export async function fetchNotifications(
   client: TipCrewClient,

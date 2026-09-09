@@ -4,9 +4,11 @@ import { classifyWorkplaceError } from '@/workplace/errors';
 import {
   acceptInvitationRpc,
   createWorkplaceRpc,
+  fetchInvitationOutcome,
   fetchMemberships,
   requestJoinRpc,
 } from '@/workplace/queries';
+import { acceptMayHaveSucceeded, acceptRecovered } from '@/distribution/recovery';
 import {
   WorkplaceContext,
   type WorkplaceStatus,
@@ -209,9 +211,24 @@ export function WorkplaceProvider({ children }: { children: ReactNode }) {
     async (token) => {
       const trimmed = token.trim();
       if (!trimmed) return { ok: false, failure: 'invalidInvite' };
-      return run('invite', (c) => acceptInvitationRpc(c, trimmed));
+      const result = await run('invite', (c) => acceptInvitationRpc(c, trimmed));
+      if (result.ok || !acceptMayHaveSucceeded(result.failure) || !client || !userId) {
+        return result;
+      }
+      /* "Already used" after a lost response. The invitation row itself says
+         whether it was THIS account that used it; only then is the membership
+         reloaded and the acceptance counted. Used by somebody else, expired
+         or withdrawn, the refusal stands exactly as the server gave it. */
+      try {
+        const outcome = await fetchInvitationOutcome(client, trimmed);
+        if (!acceptRecovered(outcome, userId)) return result;
+        await load();
+        return { ok: true };
+      } catch {
+        return result;
+      }
     },
-    [run],
+    [run, client, userId, load],
   );
 
   // After accepting an invitation the new membership arrives with the reload

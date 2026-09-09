@@ -166,11 +166,15 @@ const X_SERVER = otherRoles.rows?.find((r) => r.key === 'server')?.id ?? null;
 
 await patch(A.token, `workplace_members?id=eq.${M_A}`, { area_id: A_SERVICE, workplace_role_id: R_SERVER });
 await patch(A.token, `workplace_members?id=eq.${M_B}`, { area_id: A_SERVICE, workplace_role_id: R_SERVER });
+// A roster placeholder in the kitchen. No role: migration 20's tenancy guard
+// refuses a role from another area (the seeded `server` role is service's),
+// and this member exists only to stand in a 0%-share area for check 22.
 const third = await post(A.token, 'workplace_members', {
   workplace_id: WP, display_name: `Kitchen ${STAMP}`, role: 'employee',
-  area_id: A_KITCHEN, workplace_role_id: R_SERVER, status: 'active',
+  area_id: A_KITCHEN, workplace_role_id: null, status: 'active',
 });
 const M_C = third.rows?.[0]?.id ?? null;
+if (!M_C) die(`the kitchen placeholder could not be created: HTTP ${third.status} ${third.raw}`);
 
 const iso = (d, h, m = 0) =>
   new Date(`${d}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00Z`).toISOString();

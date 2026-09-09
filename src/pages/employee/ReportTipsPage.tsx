@@ -62,9 +62,23 @@ export function ReportTipsPage() {
       title={t('reportTitle')}
       kicker={shift.full}
       cta={{
-        label: api.busy ? t('shSaving') : t('reportSend'),
-        muted: !canSend || api.busy,
+        // The night a report is filed under is the server's business day
+        // (migration 33). Nothing is sent until it is known; a failed check
+        // turns the button into the retry.
+        label:
+          real && !api.businessDate
+            ? api.businessDayStatus === 'error'
+              ? t('retry')
+              : t('bdLoading')
+            : api.busy
+              ? t('shSaving')
+              : t('reportSend'),
+        muted: real && !api.businessDate ? api.businessDayStatus !== 'error' : !canSend || api.busy,
         onClick: () => {
+          if (real && !api.businessDate) {
+            if (api.businessDayStatus === 'error') void api.refreshBusinessDay();
+            return;
+          }
           if (!canSend) {
             show(t('shErrAmount'));
             return;

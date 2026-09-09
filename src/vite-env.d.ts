@@ -11,4 +11,6 @@
 interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL?: string;
   readonly VITE_SUPABASE_ANON_KEY?: string;
+  /** "true" lets a configured build offer demo mode (staging). Never set in production. */
+  readonly VITE_ALLOW_DEMO?: string;
 }

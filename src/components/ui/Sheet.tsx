@@ -12,20 +12,33 @@ interface SheetProps {
 /**
  * Bottom sheet. Escape closes it, focus moves inside when it opens, and the
  * scrim is a real button so it is reachable without a pointer.
+ *
+ * Focus moves into the panel exactly once, on the transition to open. The
+ * screens pass `onClose` as an inline arrow, so its identity changes on every
+ * parent render — including the render caused by each keystroke in a textarea
+ * inside the sheet. If the focus effect depended on it, every character typed
+ * would re-run the effect and pull focus off the field (the defect this
+ * comment records). The latest callback lives in a ref instead, and the
+ * Escape listener reads it at the moment the key is pressed.
  */
 export function Sheet({ open, title, onClose, children }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
   const { t } = useI18n();
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     panelRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

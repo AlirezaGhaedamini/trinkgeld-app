@@ -384,6 +384,30 @@ check('14b. every amount is an integer number of cents',
     label: `overlap ${STAMP}`, cash_cents: 9000, source: 'manual', status: 'open', created_by: M_A,
   });
   const POOL2 = pool2.rows?.[0]?.id;
+
+  /* The correction path behind the pool step's keypad. An OPEN manual pool is
+     the one thing on that screen a manager may still retype; migration 10's
+     app.guard_pool_amounts() permits it while the pool is open and refuses it
+     the moment the pool is locked. Both halves are asserted here, because a
+     screen that lets somebody type into a frozen figure is the bug this pair
+     exists to prevent. */
+  {
+    const fix = await patch(A.token, `tip_pools?id=eq.${POOL2}`, { cash_cents: 9500, card_cents: 250 });
+    check("1d. an open manual pool is still the manager's to retype",
+      fix.ok && fix.rows?.[0]?.cash_cents === 9500 && fix.rows?.[0]?.card_cents === 250,
+      `HTTP ${fix.status} ${fix.ok ? '' : fix.raw}`);
+    const back = await get(A.token, `tip_pools?select=card_cents,cash_cents,total_cents&id=eq.${POOL2}`);
+    check('1e. …and the corrected figures are what the database reads back',
+      back.rows?.[0]?.total_cents === 9750,
+      `total_cents = ${back.rows?.[0]?.total_cents}`);
+    const byStaff = await patch(B.token, `tip_pools?id=eq.${POOL2}`, { cash_cents: 1 });
+    check('1f. …but an employee cannot retype a pool at all',
+      !byStaff.ok || (byStaff.rows?.length ?? 0) === 0,
+      `HTTP ${byStaff.status}, ${byStaff.rows?.length ?? 0} row(s)`);
+    // Put the fixture back before the overlap arithmetic below reads it.
+    await patch(A.token, `tip_pools?id=eq.${POOL2}`, { cash_cents: 9000, card_cents: 0 });
+  }
+
   const calc2 = await rpc(A.token, 'calculate_distribution', { p_pool_id: POOL2 });
   const DIST2 = typeof calc2.body === 'string' ? calc2.body : null;
   const rows2 = DIST2 ? await get(A.token, `tip_distribution_entries?select=member_id&distribution_id=eq.${DIST2}`) : null;
@@ -392,6 +416,15 @@ check('14b. every amount is an integer number of cents',
     members.has(M_B), `${members.size} member(s) included`);
   check('13. fourteen minutes is not',
     !members.has(M_C), members.has(M_C) ? 'LEAK: a below-threshold shift was paid' : 'excluded, as intended');
+
+  /* Calculating locked the pool. The guard that allowed 1d must now refuse. */
+  const frozen = await patch(A.token, `tip_pools?id=eq.${POOL2}`, { cash_cents: 12345 });
+  check('1g. once the pool is locked, the same manager can no longer retype its amounts',
+    !frozen.ok || (frozen.rows?.length ?? 0) === 0,
+    `HTTP ${frozen.status}, ${frozen.rows?.length ?? 0} row(s) changed`);
+  const still = await get(A.token, `tip_pools?select=cash_cents&id=eq.${POOL2}`);
+  check('1h. …and the locked figure is untouched',
+    still.rows?.[0]?.cash_cents === 9000, `cash_cents = ${still.rows?.[0]?.cash_cents}`);
 }
 
 /* ── 19, 20, 21, 22, 23 · finalisation ───────────────────────────────────── */

@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getSupabase, isSupabaseConfigured, type TipCrewClient } from '@/lib/supabase';
+import { useBusinessDay } from '@/hooks/useBusinessDay';
 import { useWorkplace } from '@/hooks/useWorkplace';
 import { classifyShiftError, type ShiftFailure } from '@/shifts/errors';
 import {
   approveShift,
   correctShiftEnd,
+  fetchOwnShift,
   fetchOwnShifts,
   fetchReviewQueue,
   rejectShift,
@@ -13,10 +15,15 @@ import {
   submitShift,
   updateOwnShift,
 } from '@/shifts/queries';
-import { currentBusinessDate } from '@/shifts/time';
 import type { Shift, ShiftDraft } from '@/shifts/types';
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+/** The one shift the hours screen was asked to open, and how that went. */
+export type FocusStatus = 'idle' | 'loading' | 'ready' | 'notFound' | 'error';
+
+/** A uuid as PostgREST accepts one; anything else is "no such shift" without a round trip. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface ShiftActionResult {
   ok: boolean;
@@ -44,8 +51,15 @@ function useClient(): TipCrewClient | null {
  * be invalidated from everywhere. The workplace layer stays the single source
  * for identity — every call here takes the active membership from it, so no
  * screen is ever in a position to name a member or a workplace itself.
+ *
+ * `focusId` is the shift the screen was asked to open — from a notification
+ * or from a row in the log. It is fetched by id under the same membership,
+ * separately from the recent list, so a shift older than the list's window
+ * still opens, and an id that is not this member's in this workplace comes
+ * back as `notFound` rather than as somebody else's row.
  */
-export function useOwnShifts() {
+export function useOwnShifts(options: { focusId?: string | null } = {}) {
+  const focusId = options.focusId ?? null;
   const client = useClient();
   const workplace = useWorkplace();
   const membership = workplace.activeMembership;
@@ -54,8 +68,13 @@ export function useOwnShifts() {
   const [status, setStatus] = useState<LoadStatus>('idle');
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [busy, setBusy] = useState(false);
+  const [focused, setFocused] = useState<{ status: FocusStatus; shift: Shift | null }>({
+    status: 'idle',
+    shift: null,
+  });
   const alive = useRef(true);
   const token = useRef(0);
+  const focusToken = useRef(0);
 
   useEffect(() => {
     alive.current = true;
@@ -81,21 +100,62 @@ export function useOwnShifts() {
 
   useEffect(() => {
     if (!enabled) {
-      setShifts([]);
+      setShifts((current) => (current.length === 0 ? current : []));
       setStatus('idle');
       return;
     }
     void refresh();
   }, [enabled, refresh]);
 
-  /** The business day currently in progress, in the workplace's own zone. */
-  const businessDate = useMemo(() => {
-    if (!membership) return null;
-    return currentBusinessDate(
-      membership.workplace.timezone,
-      membership.workplace.businessDayStartHour,
-    );
-  }, [membership]);
+  const loadFocused = useCallback(async () => {
+    const mine = (focusToken.current += 1);
+    if (!client || !membership || !focusId) {
+      setFocused({ status: 'idle', shift: null });
+      return;
+    }
+    if (!UUID.test(focusId)) {
+      setFocused({ status: 'notFound', shift: null });
+      return;
+    }
+    // Re-reading the shift already shown keeps it on screen meanwhile.
+    setFocused((f) => (f.shift?.id === focusId ? f : { status: 'loading', shift: null }));
+    try {
+      const shift = await fetchOwnShift(client, membership, focusId);
+      if (!alive.current || mine !== focusToken.current) return;
+      setFocused(shift ? { status: 'ready', shift } : { status: 'notFound', shift: null });
+    } catch {
+      if (!alive.current || mine !== focusToken.current) return;
+      setFocused({ status: 'error', shift: null });
+    }
+  }, [client, membership, focusId]);
+
+  /* The disabled branches here and above return the SAME value when there is
+     nothing to clear. React bails out of a re-render on an unchanged state
+     value, and a fresh `[]` or `{}` would not be unchanged: any future day on
+     which `refresh`/`loadFocused` lose reference stability would turn these
+     effects into render -> setState -> render, which React ends with
+     "Maximum update depth exceeded" — and with no error boundary in the app
+     that is a blank screen, the very failure this phase is closing. */
+  useEffect(() => {
+    if (!enabled) {
+      setFocused((current) =>
+        current.status === 'idle' && current.shift === null
+          ? current
+          : { status: 'idle', shift: null },
+      );
+      return;
+    }
+    void loadFocused();
+  }, [enabled, loadFocused]);
+
+  /**
+   * The business day currently in progress — the server's answer (migration
+   * 33), null until it has arrived. The form offers this night and the one
+   * before it; the database still derives every shift's work_date from its
+   * instants, so this decides only which night the person is shown.
+   */
+  const businessDay = useBusinessDay();
+  const businessDate = businessDay.date;
 
   const submit = useCallback(
     async (draft: ShiftDraft, existingId?: string): Promise<ShiftActionResult> => {
@@ -109,6 +169,9 @@ export function useOwnShifts() {
         const shift = existingId
           ? await updateOwnShift(client, membership, existingId, draft, workplace)
           : await submitShift(client, membership, draft, workplace);
+        // The row the database returned IS the pinned shift's new state; no
+        // second read is needed to show "submitted again".
+        if (alive.current && focusId && shift.id === focusId) setFocused({ status: 'ready', shift });
         await refresh();
         return { ok: true, shift };
       } catch (error) {
@@ -117,10 +180,22 @@ export function useOwnShifts() {
         if (alive.current) setBusy(false);
       }
     },
-    [client, membership, refresh],
+    [client, membership, refresh, focusId],
   );
 
-  return { enabled, status, shifts, busy, businessDate, refresh, submit };
+  return {
+    enabled,
+    status,
+    shifts,
+    busy,
+    focused,
+    refreshFocused: loadFocused,
+    businessDate,
+    businessDayStatus: businessDay.status,
+    refreshBusinessDay: businessDay.refresh,
+    refresh,
+    submit,
+  };
 }
 
 type QueueStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
@@ -183,7 +258,7 @@ export function useReviewQueue(
 
   useEffect(() => {
     if (!enabled) {
-      setShifts([]);
+      setShifts((current) => (current.length === 0 ? current : []));
       setStatus('idle');
       return;
     }

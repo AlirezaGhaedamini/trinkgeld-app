@@ -432,6 +432,76 @@
   color: var(--color-text);
 }
 
+/* The value is a real input wearing the value's typography, so it can be
+   typed into and still reads exactly as it did: no border, no background, no
+   browser chrome, the surrounding field supplies the frame. */
+.draftValueRow {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.draftInput {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-medium);
+  line-height: 1.2;
+  color: inherit;
+  outline: none;
+  border-radius: 0;
+}
+
+.draftInput::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+/* The value used to be a span, which may overflow the field's padding; an
+   input clips at its own edge. Let the time input reach under the field's
+   right padding, exactly as far as the span could, so "18:00" is whole at
+   320px. The browser's own segment padding is removed for the same reason. */
+.draftInput[type='time'] {
+  width: calc(100% + 12px);
+  margin-right: -12px;
+}
+
+.draftInput::-webkit-datetime-edit,
+.draftInput::-webkit-datetime-edit-fields-wrapper,
+.draftInput::-webkit-datetime-edit-hour-field,
+.draftInput::-webkit-datetime-edit-minute-field,
+.draftInput::-webkit-datetime-edit-text {
+  padding: 0;
+}
+
+.draftInput::-webkit-inner-spin-button,
+.draftInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.draftInput[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.draftInput::placeholder {
+  color: var(--color-text-faint);
+}
+
+.draftUnit {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 .draftTotal {
   display: flex;
   align-items: baseline;

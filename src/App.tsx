@@ -3,6 +3,7 @@ import { AppRoutes } from '@/router';
 import { AuthProvider } from '@/auth/AuthProvider';
 import { AuthBridge } from '@/auth/AuthBridge';
 import { WorkplaceProvider } from '@/workplace/WorkplaceProvider';
+import { BusinessDayProvider } from '@/businessDay/BusinessDayProvider';
 import { AppStateProvider } from '@/state/AppStateProvider';
 import { ToastProvider } from '@/state/ToastProvider';
 import { I18nProvider } from '@/i18n/I18nProvider';
@@ -16,7 +17,9 @@ import { I18nProvider } from '@/i18n/I18nProvider';
  * `dataMode` — demo mode must never reach the database — and AuthBridge sits
  * inside everything, as the one component that couples the real session and
  * membership to the Phase 1 local state. Phase 3C deletes the bridge; the
- * providers stay.
+ * providers stay. BusinessDayProvider sits inside WorkplaceProvider because
+ * the day belongs to the active workplace — its timezone and cut-off — and
+ * it asks the server only when that layer is enabled.
  *
  * HashRouter on purpose: it needs no server rewrites and works unchanged from a
  * static host, a sub-path, and a Capacitor WebView.
@@ -27,12 +30,14 @@ export default function App() {
       <AuthProvider>
         <AppStateProvider>
           <WorkplaceProvider>
-            <ToastProvider>
-              <AuthBridge />
-              <HashRouter>
-                <AppRoutes />
-              </HashRouter>
-            </ToastProvider>
+            <BusinessDayProvider>
+              <ToastProvider>
+                <AuthBridge />
+                <HashRouter>
+                  <AppRoutes />
+                </HashRouter>
+              </ToastProvider>
+            </BusinessDayProvider>
           </WorkplaceProvider>
         </AppStateProvider>
       </AuthProvider>

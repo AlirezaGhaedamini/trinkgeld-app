@@ -14,6 +14,8 @@ import {
 } from '@/data/distributions';
 import { DEMO_PENDING_INVITES, DEMO_RULE, DEMO_WORKPLACE } from '@/data/workplace';
 import type { AppState, DataMode } from '@/state/types';
+import { demoAllowed, resolveDataMode, type DataModeInputs } from '@/state/dataMode';
+import { hasSupabaseEnv } from '@/lib/env';
 import type { AreaId, Employee, UserRole, Workplace } from '@/types';
 
 /**
@@ -178,32 +180,42 @@ export function createAccountEmployee(
 
 const STORAGE_KEY = 'tipcrew.dataMode';
 
+/** The three signals that decide whether demo mode may exist in this build. */
+function demoGate(): Pick<DataModeInputs, 'configured' | 'dev' | 'allowFlag'> {
+  return {
+    configured: hasSupabaseEnv(),
+    dev: import.meta.env.DEV,
+    allowFlag: import.meta.env.VITE_ALLOW_DEMO,
+  };
+}
+
 /**
- * Empty unless someone opted into the sample data — either with the switch
- * above the phone on a wide screen, or with `?demo=1` in the URL, which is how
- * you turn it on when testing on a phone.
+ * Empty unless someone opted into the sample data — with the switch above the
+ * phone on a wide screen, or with `?demo=1` in the URL, which is how you turn
+ * it on when testing on a phone — and only where demo mode is allowed at all.
+ * A configured production build boots real whatever the URL or the browser's
+ * memory says (see src/state/dataMode.ts).
  */
 export function readDataMode(): DataMode {
+  let urlParam: string | null = null;
+  let stored: string | null = null;
   try {
-    const fromUrl = new URLSearchParams(window.location.search).get('demo');
-    if (fromUrl === '1' || fromUrl === 'true') {
-      window.localStorage.setItem(STORAGE_KEY, 'demo');
-      return 'demo';
-    }
-    if (fromUrl === '0' || fromUrl === 'false') {
-      window.localStorage.setItem(STORAGE_KEY, 'empty');
-      return 'empty';
-    }
-    if (window.localStorage.getItem(STORAGE_KEY) === 'demo') return 'demo';
+    urlParam = new URLSearchParams(window.location.search).get('demo');
+    stored = window.localStorage.getItem(STORAGE_KEY);
   } catch {
-    /* blocked storage — fall through to the empty default */
+    /* blocked storage — decided from the environment alone */
   }
-  return 'empty';
+  const decision = resolveDataMode({ ...demoGate(), urlParam, stored });
+  if (decision.persist !== null) rememberDataMode(decision.persist);
+  return decision.mode;
 }
 
 export function rememberDataMode(mode: DataMode): void {
+  // A production build never remembers 'demo': there is nothing to switch
+  // back to it, and the next load would refuse it anyway.
+  const value: DataMode = mode === 'demo' && !demoAllowed(demoGate()) ? 'empty' : mode;
   try {
-    window.localStorage.setItem(STORAGE_KEY, mode);
+    window.localStorage.setItem(STORAGE_KEY, value);
   } catch {
     /* non-fatal: the choice just will not survive a reload */
   }

@@ -264,12 +264,20 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
                 <SectionLabel meta={hours(areaHours)}>{areaName}</SectionLabel>
 
                 {rows.map((entry) => {
+                  /* A submitted row that still carries a review was sent back
+                     and corrected: the employee cannot clear the review
+                     columns, so their presence on a submitted row is the
+                     resubmission itself. The badge says so, and the earlier
+                     note travels with it as what was asked for. */
+                  const resubmitted = entry.status === 'submitted' && entry.reviewedAt !== null;
                   const status =
                     entry.status === 'approved'
                       ? { label: t('shStatusApproved'), color: 'var(--color-money)', tone: 'tint' as const }
                       : entry.status === 'rejected'
                         ? { label: t('shStatusRejected'), color: 'var(--color-text-subtle)', tone: 'quiet' as const }
-                        : { label: t('shStatusSubmitted'), color: 'var(--color-accent)', tone: 'tint' as const };
+                        : resubmitted
+                          ? { label: t('shResubmitted'), color: 'var(--color-accent)', tone: 'tint' as const }
+                          : { label: t('shStatusSubmitted'), color: 'var(--color-accent)', tone: 'tint' as const };
 
                   return (
                     <div key={entry.id} className={styles.hoursRow}>
@@ -289,7 +297,9 @@ export function HoursReviewPage({ mode }: HoursReviewPageProps) {
                             }${entry.areaFromShift ? ` (${t('dAreaFromShift')})` : ''}${
                               entry.status === 'rejected' && entry.reviewNote
                                 ? ` · ${entry.reviewNote}`
-                                : ''
+                                : resubmitted && entry.reviewNote
+                                  ? ` · ${t('shPrevNoteShort')}: ${entry.reviewNote}`
+                                  : ''
                             }`}
                           </span>
                         </span>

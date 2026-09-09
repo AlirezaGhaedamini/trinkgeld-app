@@ -143,3 +143,32 @@ export async function acceptInvitationRpc(client: TipCrewClient, token: string):
   if (error) throw error;
   return typeof data === 'string' ? data : '';
 }
+
+/**
+ * What became of an invitation, for a retry after a lost response.
+ *
+ * Only the token's SHA-256 is stored, so the token is hashed here and the row
+ * looked up by that. The invitee may read the row (the email on it matches
+ * their profile), and `accepted_by` says whether it was THIS account that
+ * used it. Nobody else's acceptance, an expiry or a withdrawal all come back
+ * as "not recovered" and the original refusal stands.
+ */
+export async function fetchInvitationOutcome(
+  client: TipCrewClient,
+  token: string,
+): Promise<{ workplaceId: string; status: string; acceptedBy: string | null } | null> {
+  const hash = await sha256Hex(token);
+  const { data, error } = await client
+    .from('invitations')
+    .select('workplace_id, status, accepted_by')
+    .eq('token_hash', hash)
+    .limit(1);
+  if (error) throw error;
+  const row = data?.[0];
+  return row ? { workplaceId: row.workplace_id, status: row.status, acceptedBy: row.accepted_by } : null;
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}

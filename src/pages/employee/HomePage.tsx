@@ -79,6 +79,12 @@ function RealHome() {
   const tonight = shifts.businessDate
     ? (shifts.shifts.find((s) => s.workDate === shifts.businessDate) ?? null)
     : null;
+  /* A shift the manager sent back is the one thing on this card that needs
+     the person to act, whichever night it was. The card opens it directly —
+     pinned by id — rather than tonight's empty form, which is where the
+     release test lost it. A locked one waits for the manager and is not
+     offered; the log on the hours screen still shows it. */
+  const sentBack = shifts.shifts.find((s) => s.status === 'rejected' && !s.locked) ?? null;
   const report = tips.own;
 
   const firstName = membership.displayName.trim().split(/\s+/)[0] ?? membership.displayName;
@@ -167,7 +173,10 @@ function RealHome() {
         </div>
       </CardButton>
 
-      <CardButton padding="padded" onClick={() => navigate('/hours')}>
+      <CardButton
+        padding="padded"
+        onClick={() => navigate(sentBack ? `/hours?shift=${sentBack.id}` : '/hours')}
+      >
         <span className={ui.inline} style={{ gap: 14 }}>
           <span
             className={ui.avatar}
@@ -188,7 +197,7 @@ function RealHome() {
             <span
               className={ui.rowMeta}
               style={{
-                color: tonight ? 'var(--color-text-subtle)' : 'var(--color-accent)',
+                color: tonight && !sentBack ? 'var(--color-text-subtle)' : 'var(--color-accent)',
                 display: 'block',
               }}
             >
@@ -196,6 +205,11 @@ function RealHome() {
                 ? t('loadFailed')
                 : shifts.status !== 'ready'
                   ? t('dLoading')
+                  : sentBack
+                    ? t('hmFixHours').replace(
+                        '{date}',
+                        day(new Date(`${sentBack.workDate}T12:00:00`)),
+                      )
                   : tonight
                     ? `${formatClock(tonight.startMinutes)} – ${formatClock(tonight.endMinutes)} · ${t(
                         SHIFT_STATUS_LABEL[tonight.status],

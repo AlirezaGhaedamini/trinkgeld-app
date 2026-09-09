@@ -339,6 +339,68 @@ export async function deleteDraftDistribution(
   if (!data || data.length === 0) throw new Error('draft not found');
 }
 
+/**
+ * Migration 33: retire a pool with nothing standing on it. The server decides
+ * whether that is true — a draft, a sent version, a published-then-cancelled
+ * one and settled money all refuse it — and the reason goes to the audit
+ * trail. Its report sources are released, so the same reports can be pooled
+ * again with the right total.
+ */
+export async function voidPool(
+  client: TipCrewClient,
+  poolId: string,
+  reason?: string,
+): Promise<void> {
+  const { error } = await client.rpc('void_pool', {
+    p_pool_id: poolId,
+    ...(reason ? { p_reason: reason } : {}),
+  });
+  if (error) throw error;
+}
+
+/**
+ * Pools still open or locked, newest first: nights the manager started and
+ * did not finish. The pool step names one from an earlier night so it is not
+ * stranded behind "tonight".
+ */
+export async function fetchUnfinishedPools(
+  client: TipCrewClient,
+  membership: Membership,
+  limit = 5,
+): Promise<TipPool[]> {
+  const { data, error } = await client
+    .from('tip_pools')
+    .select('*')
+    .eq('workplace_id', membership.workplaceId)
+    .in('status', ['open', 'locked'])
+    .order('period_start', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map(toPool);
+}
+
+/**
+ * The newest version of this pool that was ever sent, or null. A pool with
+ * such a version is history — void_pool() refuses it — and the screen says so
+ * before the manager reaches for it.
+ */
+export async function fetchPoolPublishedId(
+  client: TipCrewClient,
+  membership: Membership,
+  poolId: string,
+): Promise<string | null> {
+  const { data, error } = await client
+    .from('tip_distributions')
+    .select('id, sent_at')
+    .eq('workplace_id', membership.workplaceId)
+    .eq('tip_pool_id', poolId)
+    .not('sent_at', 'is', null)
+    .order('sent_at', { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return data?.[0]?.id ?? null;
+}
+
 /* ── reading distributions back ──────────────────────────────────────────── */
 
 export async function fetchDistributions(

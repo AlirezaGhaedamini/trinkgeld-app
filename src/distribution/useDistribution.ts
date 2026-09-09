@@ -22,7 +22,13 @@ import type {
   Settlement,
   TipPool,
 } from '@/distribution/types';
-import { currentBusinessDate } from '@/shifts/time';
+import { useBusinessDay } from '@/hooks/useBusinessDay';
+import {
+  discardMayHaveSucceeded,
+  discardRecovered,
+  sendMayHaveSucceeded,
+  sendRecovered,
+} from '@/distribution/recovery';
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -70,8 +76,13 @@ export function useDistributionWizard(options: { enabled?: boolean } = {}) {
   const [reportTotal, setReportTotal] = useState({ count: 0, cardCents: 0, cashCents: 0 });
   const [draft, setDraft] = useState<Distribution | null>(null);
   const [detail, setDetail] = useState<DistributionDetail | null>(null);
+  /** Nights the manager started and did not finish, newest first. */
+  const [unfinishedPools, setUnfinishedPools] = useState<TipPool[]>([]);
+  /** The newest version of the current pool that was ever sent, if any. */
+  const [publishedId, setPublishedId] = useState<string | null>(null);
 
   const alive = useRef(true);
+  const token = useRef(0);
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -79,50 +90,87 @@ export function useDistributionWizard(options: { enabled?: boolean } = {}) {
     };
   }, []);
 
-  const businessDate = membership
-    ? currentBusinessDate(membership.workplace.timezone, membership.workplace.businessDayStartHour)
-    : null;
+  /**
+   * WHICH NIGHT. Three answers, in order of authority:
+   *
+   *   pinned  — the night of the pool this wizard has already found. Once a
+   *             pool exists its own stored period is the truth, and a cut-off
+   *             passing while the manager is mid-flow must not swing the wizard
+   *             onto the next night and strand the pool behind it.
+   *   chosen  — a night the manager asked to continue (an unfinished pool
+   *             from before, offered on the pool step).
+   *   server  — current_business_day() (migration 33), for finding or opening
+   *             the NEXT pool when none exists. Never the device clock.
+   */
+  const businessDay = useBusinessDay();
+  const serverDate = businessDay.date;
+  const [chosenDate, setChosenDate] = useState<string | null>(null);
+  const [pinnedDate, setPinnedDate] = useState<string | null>(null);
+  const businessDate = pinnedDate ?? chosenDate ?? serverDate;
 
   const refresh = useCallback(async () => {
     if (!client || !membership || !businessDate) return;
+    const mine = (token.current += 1);
     setStatus((s) => (s === 'ready' ? s : 'loading'));
     try {
-      const [existingPool, activeRule, reports] = await Promise.all([
+      const [existingPool, activeRule, reports, unfinished] = await Promise.all([
         api.fetchOpenPool(client, membership, businessDate, businessDate),
         api.fetchActiveRule(client, membership),
         api.fetchUnusedReportTotal(client, membership, businessDate, businessDate),
+        api.fetchUnfinishedPools(client, membership),
       ]);
       let existingDraft: Distribution | null = null;
       let existingDetail: DistributionDetail | null = null;
+      let published: string | null = null;
       if (existingPool) {
-        existingDraft = await api.fetchPoolDistribution(client, membership, existingPool.id);
+        [existingDraft, published] = await Promise.all([
+          api.fetchPoolDistribution(client, membership, existingPool.id),
+          api.fetchPoolPublishedId(client, membership, existingPool.id),
+        ]);
         if (existingDraft) {
           existingDetail = await api.fetchDistributionDetail(client, membership, existingDraft.id);
         }
       }
-      if (!alive.current) return;
+      if (!alive.current || mine !== token.current) return;
       setPool(existingPool);
       setRule(activeRule);
       setReportTotal(reports);
+      setUnfinishedPools(unfinished);
       setDraft(existingDraft);
       setDetail(existingDetail);
+      setPublishedId(published);
+      // A pool found is a night pinned; no pool means the wizard follows the
+      // server's day again. Same value, no re-render, no second round trip.
+      setPinnedDate(existingPool ? existingPool.periodStart : null);
       setStatus('ready');
     } catch {
-      if (alive.current) setStatus('error');
+      if (!alive.current || mine !== token.current) return;
+      setStatus('error');
     }
   }, [client, membership, businessDate]);
 
   useEffect(() => {
     if (!enabled) {
+      token.current += 1;
       setStatus('idle');
       setPool(null);
       setRule(null);
       setDraft(null);
       setDetail(null);
+      setUnfinishedPools([]);
+      setPublishedId(null);
+      setPinnedDate(null);
+      setChosenDate(null);
       return;
     }
     void refresh();
   }, [enabled, refresh]);
+
+  /** Continue an earlier night, or (null) go back to the server's day. */
+  const selectDate = useCallback((date: string | null) => {
+    setChosenDate(date);
+    setPinnedDate(null);
+  }, []);
 
   const run = useCallback(
     async <T,>(action: (c: TipCrewClient, m: NonNullable<typeof membership>) => Promise<T>): Promise<ActionResult<T>> => {
@@ -145,11 +193,40 @@ export function useDistributionWizard(options: { enabled?: boolean } = {}) {
     [client, membership, refresh],
   );
 
+  /**
+   * Publish the draft. If the server refuses because the row is no longer a
+   * draft, that may be this same send whose answer never arrived: the exact
+   * record is reloaded, and only a sent or confirmed status counts as done.
+   */
+  const send = useCallback(async (): Promise<ActionResult<void>> => {
+    const id = draft?.id;
+    if (!id) return { ok: false, failure: 'unknown' };
+    const result = await run((c) => api.sendDistribution(c, id));
+    if (result.ok || !sendMayHaveSucceeded(result.failure) || !client || !membership) return result;
+    try {
+      const row = await api.fetchDistributionDetail(client, membership, id);
+      if (sendRecovered(row?.distribution.status)) {
+        await refresh();
+        return { ok: true };
+      }
+    } catch {
+      /* the reload failed; the refusal stands */
+    }
+    return result;
+  }, [draft?.id, run, client, membership, refresh]);
+
   return {
     enabled,
     status,
     busy,
     businessDate,
+    serverDate,
+    chosenDate,
+    businessDayStatus: businessDay.status,
+    refreshBusinessDay: businessDay.refresh,
+    unfinishedPools,
+    publishedId,
+    selectDate,
     pool,
     rule,
     reportTotal,
@@ -173,8 +250,18 @@ export function useDistributionWizard(options: { enabled?: boolean } = {}) {
       run((c, m) => api.saveAreaShares(c, m, shares)),
 
     calculate: () => run((c) => api.calculateDistribution(c, pool!.id)),
-    send: () => run((c) => api.sendDistribution(c, draft!.id)),
+    send,
     cancel: (reason: string) => run((c) => api.cancelDistribution(c, draft!.id, reason)),
+    /**
+     * Migration 33: set the current pool aside. The server refuses a pool
+     * with a draft, a sent version or published history; the screen offers
+     * the action only when none of those is in view, and the refresh that
+     * follows shows the night without a pool, ready to be opened again.
+     */
+    voidPool: (reason?: string) =>
+      run((c) =>
+        pool ? api.voidPool(c, pool.id, reason) : Promise.reject(new Error('pool not found')),
+      ),
   };
 }
 
@@ -324,22 +411,47 @@ export function useDistributionHistory() {
     [client],
   );
 
-  /** Publishes a draft. The stale-input check lives in the database. */
+  /**
+   * Publishes a draft. The stale-input check lives in the database.
+   *
+   * "Only a draft can be sent" after a retry may be this very send, whose
+   * answer was lost on the way back. The exact record is reloaded, and only
+   * a sent or confirmed status turns the refusal into a success; a cancelled
+   * or replaced row keeps the error, because that is not what was asked for.
+   */
   const send = useCallback(
     async (id: string) => {
-      if (!client) return { ok: false as const, failure: 'notConfigured' as const };
+      if (!client || !membership) return { ok: false as const, failure: 'notConfigured' as const };
       try {
         await api.sendDistribution(client, id);
         await refresh();
         return { ok: true as const };
       } catch (error) {
-        return { ok: false as const, failure: classifyDistributionError(error) };
+        const failure = classifyDistributionError(error);
+        if (sendMayHaveSucceeded(failure)) {
+          try {
+            const row = await api.fetchDistributionDetail(client, membership, id);
+            if (sendRecovered(row?.distribution.status)) {
+              await refresh();
+              return { ok: true as const, recovered: true as const };
+            }
+          } catch {
+            /* the reload failed; the refusal stands */
+          }
+        }
+        return { ok: false as const, failure };
       }
     },
-    [client, refresh],
+    [client, membership, refresh],
   );
 
-  /** Removes a draft that was never sent. The policy allows nothing else. */
+  /**
+   * Removes a draft that was never sent. The policy allows nothing else.
+   *
+   * A DELETE that matched nothing may be a retry of one that already worked.
+   * The row is reloaded: gone means discarded — the policy cannot remove a
+   * published row, so absence is proof — and still there means a real failure.
+   */
   const discardDraft = useCallback(
     async (id: string) => {
       if (!client || !membership) return { ok: false as const, failure: 'notConfigured' as const };
@@ -348,7 +460,20 @@ export function useDistributionHistory() {
         await refresh();
         return { ok: true as const };
       } catch (error) {
-        return { ok: false as const, failure: classifyDistributionError(error) };
+        const failure = classifyDistributionError(error);
+        if (discardMayHaveSucceeded(failure)) {
+          try {
+            const row = await api.fetchDistributionDetail(client, membership, id);
+            if (discardRecovered(row !== null)) {
+              await refresh();
+              return { ok: true as const, recovered: true as const };
+            }
+            return { ok: false as const, failure: 'discardFailed' as const };
+          } catch {
+            /* the reload failed; the refusal stands */
+          }
+        }
+        return { ok: false as const, failure };
       }
     },
     [client, membership, refresh],
@@ -434,6 +559,7 @@ export function useDistributionDetail(distributionId: string | null | undefined)
   const [status, setStatus] = useState<LoadStatus>('idle');
   const [detail, setDetail] = useState<DistributionDetail | null>(null);
   const alive = useRef(true);
+  const token = useRef(0);
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -443,23 +569,27 @@ export function useDistributionDetail(distributionId: string | null | undefined)
 
   const refresh = useCallback(async () => {
     if (!client || !membership || !distributionId) return;
+    const mine = (token.current += 1);
     setStatus((s) => (s === 'ready' ? s : 'loading'));
     try {
       const loaded = await api.fetchDistributionDetail(client, membership, distributionId);
-      if (!alive.current) return;
+      if (!alive.current || mine !== token.current) return;
       setDetail(loaded);
       setStatus('ready');
     } catch {
-      if (alive.current) setStatus('error');
+      if (!alive.current || mine !== token.current) return;
+      setStatus('error');
     }
   }, [client, membership, distributionId]);
 
+  // A different id or workplace starts from nothing: the previous record is
+  // gone before the next request leaves, and its late answer — success or
+  // error — is retired by the token. Record A is never shown under B's URL.
   useEffect(() => {
-    if (!enabled) {
-      setDetail(null);
-      setStatus('idle');
-      return;
-    }
+    token.current += 1;
+    setDetail(null);
+    setStatus('idle');
+    if (!enabled) return;
     void refresh();
   }, [enabled, refresh]);
 

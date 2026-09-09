@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
 import { BandBar } from '@/components/ui/BandBar';
@@ -50,6 +50,19 @@ export function DistributionDetailPage() {
   const [answering, setAnswering] = useState<QueryRow | null>(null);
   const [response, setResponse] = useState('');
   const [reload, setReload] = useState(0);
+  /**
+   * The last thing that finished on this screen, or null.
+   *
+   * Recording a payout, reversing one and answering a question all leave the
+   * manager exactly where they were, with a toast that is gone in seconds and
+   * a back arrow that only unwinds the screens they arrived through — this is
+   * a pushed route, so it carries no tab bar. Setting this puts the sticky
+   * bar up with one intentional way out. It is a completion state, not a
+   * redirect: nothing moves until the manager taps it.
+   */
+  const [completed, setCompleted] = useState<
+    'poRecorded' | 'revRecorded' | 'qResolvedToast' | 'corrSentNote' | null
+  >(null);
   const [supersededBy, setSupersededBy] = useState<string | null>(null);
   const [correcting, setCorrecting] = useState(false);
   const [corrReason, setCorrReason] = useState<CorrectionReason>('hours');
@@ -72,6 +85,9 @@ export function DistributionDetailPage() {
   const [sending, setSending] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [acting, setActing] = useState<'send' | 'discard' | null>(null);
+  /** Which record is on screen, and which load is the current one. */
+  const shownId = useRef<string | null>(null);
+  const loadToken = useRef(0);
 
   /**
    * Read back, never recomputed.
@@ -82,9 +98,30 @@ export function DistributionDetailPage() {
    */
   useEffect(() => {
     if (!real || !distributionId) return;
-    let cancelled = false;
+    // A different record starts from nothing. A reload of the SAME record —
+    // after a payout, an answer, a correction — keeps what is on screen until
+    // the fresh rows arrive, so the page does not flash empty on every action.
+    if (shownId.current !== distributionId) {
+      shownId.current = distributionId;
+      setDetail(null);
+      setDetailState('loading');
+      setAckRows([]);
+      setQueries([]);
+      setSupersededBy(null);
+      setSettlement(null);
+      setMoved([]);
+      setEvents([]);
+      /* The completion bar belongs to the record it was earned on. This
+         screen stays MOUNTED when only :distributionId changes — creating a
+         correction pushes straight from one distribution to its replacement —
+         so without this the bar would follow the manager onto the new record
+         carrying the previous one's note. */
+      setCompleted(null);
+    }
+    const mine = (loadToken.current += 1);
+    const stale = () => mine !== loadToken.current;
     void history.loadDetailResult(distributionId).then((result) => {
-      if (cancelled) return;
+      if (stale()) return;
       if (result.status === 'error') {
         setDetailState('error');
         return;
@@ -93,27 +130,27 @@ export function DistributionDetailPage() {
       setDetailState(result.detail ? 'ready' : 'missing');
     });
     void history.loadAckState(distributionId).then((rows) => {
-      if (!cancelled) setAckRows(rows);
+      if (!stale()) setAckRows(rows);
     });
     void history.loadQueries(distributionId).then((rows) => {
-      if (!cancelled) setQueries(rows);
+      if (!stale()) setQueries(rows);
     });
     void history.loadSupersededBy(distributionId).then((id) => {
-      if (!cancelled) setSupersededBy(id);
+      if (!stale()) setSupersededBy(id);
     });
     // Settlement is read, never computed here: the amount owed is the server's
     // answer, and this screen only shows it.
     void history.loadSettlement(distributionId).then((row) => {
-      if (!cancelled) setSettlement(row);
+      if (!stale()) setSettlement(row);
     });
     void history.loadMemberSettlement(distributionId).then((rows) => {
-      if (!cancelled) setMoved(rows);
+      if (!stale()) setMoved(rows);
     });
     void history.loadPayoutEvents(distributionId).then((rows) => {
-      if (!cancelled) setEvents(rows);
+      if (!stale()) setEvents(rows);
     });
     return () => {
-      cancelled = true;
+      loadToken.current += 1;
     };
   }, [real, distributionId, reload, history.loadDetailResult, history.loadAckState,
       history.loadQueries, history.loadSupersededBy, history.loadSettlement,
@@ -253,6 +290,7 @@ export function DistributionDetailPage() {
       setPaying(false);
       setPayNote('');
       show(t('poRecorded'));
+      setCompleted('poRecorded');
       setReload((n) => n + 1);
     };
 
@@ -274,6 +312,7 @@ export function DistributionDetailPage() {
       setReversing(false);
       setRevNote('');
       show(t('revRecorded'));
+      setCompleted('revRecorded');
       setReload((n) => n + 1);
     };
 
@@ -319,6 +358,7 @@ export function DistributionDetailPage() {
       setResponse('');
       setReload((n) => n + 1);
       show(t('qResolvedToast'));
+      setCompleted('qResolvedToast');
     };
     const byArea = new Map<string, typeof entries>();
     for (const entry of entries) {
@@ -331,6 +371,15 @@ export function DistributionDetailPage() {
       <Screen
         title={t('distributions')}
         kicker={day(new Date(`${dist.periodStart}T12:00:00`))}
+        cta={
+          completed
+            ? {
+                label: t('backToOverview'),
+                onClick: () => navigate('/manager'),
+                note: t(completed),
+              }
+            : undefined
+        }
       >
         <div className={styles.resultHead}>
           <div>
@@ -667,6 +716,11 @@ export function DistributionDetailPage() {
                     return;
                   }
                   show(t('dSentLabel'));
+                  /* The correction has reached the team: this workflow is
+                     over. The plain draft hands over to the sent screen; a
+                     correction stays here so the chain it belongs to is
+                     still on screen, so it needs its own way out. */
+                  setCompleted('corrSentNote');
                   setReload((n) => n + 1);
                 });
               }}

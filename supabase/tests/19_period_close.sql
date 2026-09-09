@@ -673,7 +673,7 @@ select coalesce(sum((e ->> 'entitlement_cents')::bigint), 0) as c_ag_all_rows
 select count(*) as c_ag_rep_n2 from jsonb_array_elements(:'c_agg'::jsonb -> 'distributions') e
   where not (e ->> 'is_current')::boolean \gset
 
-select tests.ok(:'c_ag_rep_n'::int = 2 and :'c_ag_rep_n2'::int = 2,
+select tests.ok(:'c_ag_repn'::int = 2 and :'c_ag_rep_n2'::int = 2,
   'C84 the period holds two superseded versions, not one');
 select tests.ok(:'c_ag_rep'::bigint = :'c_ag_rep_rows'::bigint,
   'C85 …and the replaced total is the aggregate of every one of them');

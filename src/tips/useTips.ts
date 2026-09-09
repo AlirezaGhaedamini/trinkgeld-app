@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getSupabase, isSupabaseConfigured, type TipCrewClient } from '@/lib/supabase';
+import { useBusinessDay } from '@/hooks/useBusinessDay';
 import { useWorkplace } from '@/hooks/useWorkplace';
 import { classifyShiftError, type ShiftFailure } from '@/shifts/errors';
-import { currentBusinessDate } from '@/shifts/time';
 import { fetchOwnReport, fetchWorkplaceReports, saveOwnReport } from '@/tips/queries';
 import { validateReport, type TipReport } from '@/tips/types';
 
@@ -44,12 +44,12 @@ export function useTipReports() {
     };
   }, []);
 
-  const businessDate = membership
-    ? currentBusinessDate(
-        membership.workplace.timezone,
-        membership.workplace.businessDayStartHour,
-      )
-    : null;
+  // The night a report is filed under is the server's business day (migration
+  // 33), never the device clock: a phone with the wrong date cannot file
+  // tonight's tips under yesterday. Null until the server has answered, and
+  // nothing is read or written until then.
+  const businessDay = useBusinessDay();
+  const businessDate = businessDay.date;
 
   const refresh = useCallback(async () => {
     if (!client || !membership || !businessDate) return;
@@ -98,5 +98,16 @@ export function useTipReports() {
     [client, membership, businessDate, refresh],
   );
 
-  return { enabled, status, own, workplaceReports, busy, businessDate, refresh, save };
+  return {
+    enabled,
+    status,
+    own,
+    workplaceReports,
+    busy,
+    businessDate,
+    businessDayStatus: businessDay.status,
+    refreshBusinessDay: businessDay.refresh,
+    refresh,
+    save,
+  };
 }

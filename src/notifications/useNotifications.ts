@@ -15,8 +15,20 @@ import { classifyNotificationError } from '@/notifications/errors';
 import * as api from '@/notifications/queries';
 import type { AppNotification } from '@/notifications/types';
 
+/**
+ * getSupabase() THROWS by design when the environment is wrong — a missing
+ * URL, or an anon key that looks like a service-role key (src/lib/env.ts).
+ * Called bare during render, that throw unmounts the whole application and
+ * leaves a blank page. Every other domain hook already catches it and falls
+ * back to the disabled state, which shows the empty inbox instead.
+ */
 function useClient(): TipCrewClient | null {
-  return isSupabaseConfigured() ? getSupabase() : null;
+  if (!isSupabaseConfigured()) return null;
+  try {
+    return getSupabase();
+  } catch {
+    return null;
+  }
 }
 
 export function useNotifications() {

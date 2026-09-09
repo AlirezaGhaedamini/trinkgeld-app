@@ -90,7 +90,8 @@ begin;
   select member_id as winner1 from public.tip_distribution_entries
     where distribution_id = :'dist10' and amount_cents = 334 \gset
   delete from public.tip_distributions where id = :'dist10';
-  update public.tip_pools set status = 'open' where id = :'pool10';
+  -- Migration 33: a client no longer moves a pool's status; the locked pool is
+  -- recalculated as it is, which is what calculate_distribution() always allowed.
   select public.calculate_distribution(:'pool10') as dist10b \gset
 commit;
 
@@ -266,7 +267,7 @@ select tests.ok(
 begin;
   select tests.as_user('d0000000-0000-0000-0000-000000000001');
   delete from public.tip_distributions where id = :'dist_s';
-  update public.tip_pools set status = 'open' where id = :'pool_s';
+  -- Migration 33: see D5 — the locked pool is recalculated as it is.
   select public.calculate_distribution(:'pool_s') as dist_s2 \gset
   select public.send_distribution(:'dist_s2');
 commit;
@@ -357,7 +358,8 @@ commit;
 
 begin;
   select tests.as_user('d0000000-0000-0000-0000-000000000001');
-  update public.tip_pools set status = 'void' where id = :'pool_r';
+  -- Migration 33: voiding is void_pool()'s; a raw status update is refused.
+  select public.void_pool(:'pool_r', 'Pooled against the wrong night.');
 commit;
 
 select tests.ok(

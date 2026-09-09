@@ -72,7 +72,17 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     const german = language === 'Deutsch';
     const locale = german ? 'de-DE' : 'en-US';
 
-    const t = (key: StringKey) => dict[key] ?? key;
+    /* Every screen builds keys by looking one up in a Record keyed by a
+       database enum: SHIFT_STATUS_LABEL, PAYOUT_STATE_LABEL, ACK_VIEW,
+       NOTIFICATION_TITLE and a dozen more. The day the database grows a
+       value the running build does not know, that lookup is undefined, and
+       a caller doing t(...).replace('{when}', x) throws inside render,
+       which unmounts the entire app: a blank screen, no header, no error
+       state. That is a real bug the release test found. The missing map
+       entry is still the defect and is still fixed at its source; this
+       only guarantees the failure is a visible wrong word rather than the
+       loss of the whole application. */
+    const t = (key: StringKey) => dict[key] ?? (key as string | undefined) ?? '';
 
     const num = (input: number, decimals: number) =>
       input.toLocaleString(locale, {

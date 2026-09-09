@@ -10,9 +10,9 @@ import { useI18n } from '@/hooks/useI18n';
 import { useActiveRole } from '@/hooks/useWorkplace';
 import { useNotifications } from '@/notifications/useNotifications';
 import {
-  NOTIFICATION_ICON,
-  isManagerNotification,
   notificationBodyKey,
+  notificationIcon,
+  notificationTarget,
   notificationTitleKey,
   type AppNotification,
 } from '@/notifications/types';
@@ -36,35 +36,12 @@ export function NotificationsPage() {
   const mine = useMyShare();
 
   /**
-   * Where a notification takes you.
-   *
-   * A manager goes to the manager view of the night, which handles every
-   * version including a replaced one. An employee goes to their own share — and
-   * to the version that is CURRENT, resolved forward through the lineage, so
-   * nobody is dropped onto a cancelled distribution they can no longer act on
-   * when a live replacement exists.
+   * Where a notification takes you. The rule lives in the domain module, so
+   * the chevron below and the tap below cannot disagree, and the offline check
+   * drives the very same function.
    */
-  const targetOf = (n: AppNotification): string | null => {
-    if (!n.distributionId) return null;
-    if (isManagerNotification(n) || role === 'manager') {
-      return `/manager/distributions/${n.distributionId}`;
-    }
-    const visible = (id: string) => mine.distributions.some((d) => d.id === id);
-    const head = lineageHeadId(mine.distributions, n.distributionId);
-    if (visible(head)) return `/payout/${head}`;
-
-    /* A member can be dropped from a correction — their hours rejected, their
-       area moved to a zero share — and then they hold no entry on the version
-       the notification names, so member_distributions will not show it to them.
-       They still hold an entry on the version it replaced, which is exactly the
-       row whose superseded_by (migration 31) points at what they cannot see.
-       Land them there, where the "Replaced" badge tells the story. Never on a
-       route the database would answer with nothing. */
-    const predecessor = mine.distributions.find(
-      (d) => d.supersededBy === head || d.supersededBy === n.distributionId,
-    );
-    return predecessor ? `/payout/${predecessor.id}` : null;
-  };
+  const targetOf = (n: AppNotification): string | null =>
+    notificationTarget(n, { role, distributions: mine.distributions, lineageHeadId });
 
   const open = async (n: AppNotification) => {
     const to = targetOf(n);
@@ -91,16 +68,19 @@ export function NotificationsPage() {
             const period = n.payload.period_start
               ? day(new Date(`${n.payload.period_start}T12:00:00`))
               : '';
+            const date = n.payload.work_date
+              ? day(new Date(`${n.payload.work_date}T12:00:00`))
+              : period;
             const title = t(notificationTitleKey(n))
               .replace('{who}', n.payload.member_name ?? '')
               .replace('{when}', period);
-            const body = t(notificationBodyKey(n)).replace('{when}', period);
+            const body = t(notificationBodyKey(n)).replace('{when}', period).replace('{date}', date);
             return (
               <ListRow
                 key={n.id}
                 leading={
                   <Icon
-                    name={NOTIFICATION_ICON[n.type]}
+                    name={notificationIcon(n)}
                     size={18}
                     color={n.readAt ? 'var(--color-text-muted)' : 'var(--color-accent)'}
                   />
@@ -109,7 +89,7 @@ export function NotificationsPage() {
                 meta={body}
                 strong={!n.readAt}
                 trailing={n.readAt ? null : <Badge tone="tint">{t('nNew')}</Badge>}
-                chevron={Boolean(n.distributionId)}
+                chevron={targetOf(n) !== null}
                 onClick={() => void open(n)}
               />
             );

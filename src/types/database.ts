@@ -99,6 +99,7 @@ export type Database = {
           query_id: string | null
           payout_id: string | null
           reversal_id: string | null
+          shift_id: string | null
           payload: Json
           created_at: string
           read_at: string | null
@@ -112,6 +113,7 @@ export type Database = {
           query_id?: string | null
           payout_id?: string | null
           reversal_id?: string | null
+          shift_id?: string | null
           payload?: Json
           created_at?: string
           read_at?: string | null
@@ -125,6 +127,7 @@ export type Database = {
           query_id?: string | null
           payout_id?: string | null
           reversal_id?: string | null
+          shift_id?: string | null
           payload?: Json
           created_at?: string
           read_at?: string | null
@@ -1824,6 +1827,11 @@ export type Database = {
         Args: { p_distribution_id: string; p_reason: string }
         Returns: undefined
       }
+      // Migration 33: the server's business day for any active member.
+      current_business_day: {
+        Args: { p_workplace_id: string }
+        Returns: string
+      }
       create_invitation: {
         Args: {
           p_area_id?: string
@@ -1850,6 +1858,11 @@ export type Database = {
       manager_dashboard: {
         Args: { p_workplace_id: string }
         Returns: Json
+      }
+      // Migration 33: retire an open or locked pool with nothing standing on it.
+      void_pool: {
+        Args: { p_pool_id: string; p_reason?: string }
+        Returns: undefined
       }
       mark_notification_read: {
         Args: { p_notification_id: string }
@@ -2035,6 +2048,7 @@ export type Database = {
         | "payout_recorded"
         | "payout_reversed"
         | "query_raised"
+        | "shift_rejected"
       payout_method: "cash" | "payroll" | "bank_transfer" | "other"
       payout_status: "unpaid" | "paid"
       payout_state: "unpaid" | "paid" | "reversed"

@@ -1161,6 +1161,159 @@ the brief asked for the architecture to be reported rather than guessed at.
 
 ---
 
+## 4m. Production hardening (migration 33)
+
+Phase 3R-A. Nothing here adds a feature; it moves four invariants that the
+screens had been keeping from the browser into the database.
+
+### A client never moves a distribution or a pool by hand
+
+`tip_distributions` had an UPDATE grant and a manager policy from migration 10,
+and `app.guard_sent_distribution()` only refused edits to rows that had left
+`draft`. A single PATCH on a draft could set `status = 'sent'` without
+`send_distribution()` — no fingerprint check, no `sent_at`, no pool moving to
+`distributed`, a notification for a row nobody published — or rewrite the
+draft's totals and `tip_pool_id`. No screen or script ever did that; every
+transition has been an RPC since Phase 2, and the only client write on the
+table is `DELETE` of a draft. Migration 33 therefore refuses **every** client
+UPDATE three times over: `app.guard_distribution_client_write()` raises unless
+`app.is_trusted_context()`, the policy `distributions_update_manager` is
+dropped, and UPDATE is revoked from `authenticated`. The engine's functions are
+`SECURITY DEFINER` and run as the owner, which is what the trusted-context check
+recognises.
+
+`tip_pools` keeps its INSERT and UPDATE grants because the app uses them: a
+manual pool is inserted, and its amounts are edited while it is open.
+`app.guard_pool_lifecycle()` limits a client to exactly that — insert only as
+`open` and `manual`, update only `label`, `note` and (through migration 10's
+amount guard) the amounts of an open pool. `status`, `locked_at`, `period`,
+`source` and identity are moved by `calculate_distribution()`,
+`send_distribution()`, `cancel_distribution()` and `void_pool()` alone.
+
+| Table | SELECT | INSERT | UPDATE | DELETE | Lifecycle |
+| --- | --- | --- | --- | --- | --- |
+| `tip_distributions` | manager | none | **none** | draft, manager | RPC only |
+| `tip_pools` | manager | manager, open + manual only | manager, label/note/open amounts | none | RPC only |
+
+### Published means `sent_at`
+
+Migrations 29 and 31 already read publication off `sent_at`, which only
+`send_distribution()` writes and nothing clears. `app.distribution_is_published()`
+and `member_distributions` still said `status <> 'draft'`. They now require
+`sent_at is not null` as well, so an ordinary sent version, a confirmed one, a
+replaced original and a cancelled-after-send row stay visible to the people in
+them, and a row that never went out — which nothing can produce any more —
+would be nobody's history. `cancel_distribution()` refuses a draft for the same
+reason: a draft is deleted or recalculated, never turned into a cancelled row
+that was never sent.
+
+### Recovering a pool: discard the draft, void the pool, pool again
+
+A manager who calculated a draft against a wrong total was stuck: amounts
+freeze at calculation, no RPC reopens a pool, and a replacement reuses the
+total. `void_pool(p_pool_id, p_reason)` is the way out, and it is the only new
+lifecycle transition. It is manager-only, takes the row lock and then the same
+advisory lock as `calculate_distribution()`, and permits exactly an `open` or
+`locked` pool with no draft, no live payout and no version that was ever
+published. A `distributed` pool, or one whose distribution was sent and later
+cancelled, is refused: its money is on the record. Voiding touches no amount;
+migration 15's trigger releases the report sources, so the same reports can be
+pooled again, and the period index already ignores void pools. A retry on an
+already void pool returns quietly. The reason lands in `audit_log` through
+`app.audit_reason`. There is deliberately no `reopen_pool`.
+
+### The server's business day, for any member
+
+`current_business_day(p_workplace_id)` returns
+`app.business_day(now(), workplace)` to any active member of the workplace and
+refuses everyone else — another workplace's member, a suspended or departed
+one, an anonymous caller. It is `SECURITY INVOKER`: both helpers it calls are
+definer functions `authenticated` may execute, and it reads nothing itself. The
+browser mirror in `src/shifts/time.ts` is a preview of this answer, never the
+authority; Phase 3R-B moves the hooks onto it.
+
+---
+
+## 4n. A shift sent back tells its owner (migrations 34 and 35)
+
+Phase 3R-D, from a manual release test. A manager rejected Sunday's shift on
+Monday; the employee was never told, and the hours form could open only
+tonight and last night, so the rejected shift sat in the log, note and all,
+reachable from nowhere. The client fix is `#/hours?shift=<id>`, which opens
+one exact shift pinned to its own night. The backend fix is the seventh
+notification type.
+
+### Why two migrations
+
+`alter type … add value` may run inside a transaction, but the new value
+cannot be *used* until that transaction commits, and `supabase db push`
+runs one transaction per file. Migration 34 therefore adds `shift_rejected`
+to `notification_type` and does nothing else; migration 35 is the first
+transaction in which the value may be spelled. A whole new type — the route
+migration 27 took for `payout_state` — was not worth it here: the column,
+the shape constraint, the dedupe index, `app.notify_members()` and the
+client all name `notification_type`.
+
+### What migration 35 changes
+
+| Object | Change |
+| --- | --- |
+| `member_notifications.shift_id` | new, `references shifts on delete cascade`, partial index where not null |
+| `notifications_source_shape` | rebuilt: every existing branch also requires `shift_id is null`; `shift_rejected` requires `shift_id` and every money source null |
+| `member_notifications_dedupe` | rebuilt as `(member_id, type, coalesce(shift_id, reversal_id, payout_id, query_id, distribution_id))` — existing identities unchanged |
+| `app.guard_notification_immutable()` | `shift_id` joins the tuple of columns that may never change |
+| `app.notify_members()` | dropped and recreated with `p_shift_id uuid default null` appended; the five migration-30 callers pass named arguments and are untouched |
+| `app.notify_shift_rejected()` + `shifts_notify_rejected` | new AFTER UPDATE trigger, `when (new.status = 'rejected' and old.status is distinct from 'rejected')` |
+
+### Who is told, and what
+
+Exactly the member whose shift it is, through `app.notifiable_members()`,
+so a placeholder, a suspended member and one who has left are told nothing.
+No manager is told; no colleague is. The payload is
+`{"work_date": …}` and nothing else — the manager's note is **not** copied.
+It stays on the shift, behind the employee's own row policy, where the deep
+link reads it and where the manager's next decision overwrites it
+(`src/shifts/queries.ts` writes `review_note: note ?? null` on every
+review). Copying prose into an immutable row would freeze a sentence the
+manager may later replace.
+
+### A second rejection
+
+A shift can be rejected, corrected, resubmitted and rejected again. There is
+no review-history table to key a second row on, and a second inbox row for
+the same shift would say nothing the first does not. V1 keeps one row per
+shift: the trigger's `notify_members()` call collides on the dedupe index
+and inserts nothing, and the `update … set read_at = null` that follows
+re-arms the row. `read_at` is the one column the immutability guard lets
+move, so the re-arm is inside the existing rule, not an exception to it —
+suite 23 proves the guard still refuses the payload, the member and
+`shift_id` on that very row while the read_at-only change goes through.
+The row's `id`, `created_at` and payload are exactly as first written.
+
+### The correction itself needs no backend
+
+`shifts_update` (migration 8) has always let an employee move their own
+unlocked, non-approved shift to `submitted`, and `app.guard_shift_columns()`
+(migration 14) keeps `reviewed_by`, `reviewed_at` and `review_note` out of
+their hands. So a resubmitted shift is a `submitted` row that still carries
+a review — which is how both screens recognise it: the status is current,
+the review is history, and the manager's approval clears the note. There is
+deliberately no `resubmit_shift` RPC; a second write path with its own
+opinion of the transition is how a hole gets left open. A locked rejected
+shift stays the manager's until they unlock it, and an approved one is
+never the employee's to edit.
+
+### Nothing widens
+
+`notifications_read_own` is unchanged; the table still grants clients
+SELECT and nothing else. The deep link's id is resolved by
+`fetchOwnShift()` under `workplace_id` **and** `member_id` of the active
+membership, so a manager — who may read the whole workplace — cannot open a
+colleague's shift in a form that would try to write it as their own, and a
+stale or foreign id lands on "not available".
+
+---
+
 ## 5. Security model
 
 ### Roles
