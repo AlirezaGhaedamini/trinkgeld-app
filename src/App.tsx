@@ -1,5 +1,6 @@
 import { HashRouter } from 'react-router-dom';
 import { AppRoutes } from '@/router';
+import { ErrorBoundary } from '@/components/layout/ErrorBoundary';
 import { AuthProvider } from '@/auth/AuthProvider';
 import { AuthBridge } from '@/auth/AuthBridge';
 import { WorkplaceProvider } from '@/workplace/WorkplaceProvider';
@@ -34,7 +35,13 @@ export default function App() {
               <ToastProvider>
                 <AuthBridge />
                 <HashRouter>
-                  <AppRoutes />
+                  {/* Inside the router so a throw in one screen does not take
+                      the providers with it, and outside AppRoutes so it catches
+                      the routing itself. I18n is above it, so the fallback
+                      always has language. */}
+                  <ErrorBoundary>
+                    <AppRoutes />
+                  </ErrorBoundary>
                 </HashRouter>
               </ToastProvider>
             </BusinessDayProvider>

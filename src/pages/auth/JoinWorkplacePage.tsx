@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
+import { SignOutButton } from '@/auth/SignOutButton';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
@@ -291,6 +292,11 @@ export function JoinWorkplacePage() {
           </Button>
         </div>
       </Card>
+
+      {/* Nobody on this screen has a membership yet, so there is no tab bar
+          and no route to the profile screen that normally carries this. It
+          is also the screen an invitation opens on the wrong account. */}
+      <SignOutButton />
     </Screen>
   );
 }

@@ -190,6 +190,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [client]);
 
+  /**
+   * Where Supabase sends somebody who follows a recovery link.
+   *
+   * Built from the page the app is actually served from, so it works from a
+   * sub-path and from a Capacitor WebView, and it names a HASH route because
+   * this app routes on the fragment. Whatever origin this resolves to has to
+   * be listed under Authentication → URL configuration → Redirect URLs, or
+   * Supabase will refuse to send people back here; docs/RELEASE_CHECKLIST.md
+   * carries that as a release item.
+   */
+  const recoveryRedirect = useCallback(
+    () => `${window.location.origin}${window.location.pathname}#/reset/new`,
+    [],
+  );
+
+  const requestPasswordReset = useCallback<AuthValue['requestPasswordReset']>(
+    async (email) => {
+      if (!client) return { ok: false, failure: 'notConfigured' };
+      setBusy(true);
+      try {
+        const { error } = await client.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: recoveryRedirect(),
+        });
+        // A refusal that only means "no such address" must not reach the
+        // screen, or the form becomes a way to test whether somebody has an
+        // account here. Rate limiting and a malformed address are the caller's
+        // own problem and are reported; everything else reads as sent.
+        if (error) {
+          const failure = classifyAuthError(error);
+          if (failure === 'rateLimited' || failure === 'invalidEmail' || failure === 'network') {
+            return { ok: false, failure };
+          }
+        }
+        return { ok: true };
+      } catch (error) {
+        const failure = classifyAuthError(error);
+        return failure === 'network' ? { ok: false, failure } : { ok: true };
+      } finally {
+        if (alive.current) setBusy(false);
+      }
+    },
+    [client, recoveryRedirect],
+  );
+
+  const setPassword = useCallback<AuthValue['setPassword']>(
+    async (password) => {
+      if (!client) return { ok: false, failure: 'notConfigured' };
+      setBusy(true);
+      try {
+        const { error } = await client.auth.updateUser({ password });
+        if (error) return { ok: false, failure: classifyAuthError(error) };
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, failure: classifyAuthError(error) };
+      } finally {
+        if (alive.current) setBusy(false);
+      }
+    },
+    [client],
+  );
+
   const value = useMemo<AuthValue>(
     () => ({
       enabled,
@@ -202,8 +263,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signOut,
+      requestPasswordReset,
+      setPassword,
     }),
-    [enabled, status, session, profile, busy, signIn, signUp, signOut],
+    [
+      enabled, status, session, profile, busy,
+      signIn, signUp, signOut, requestPasswordReset, setPassword,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

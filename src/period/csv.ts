@@ -249,7 +249,17 @@ export function csvSections(data: PeriodExport, t: Translate): Line[] {
       ].map((k) => csvField(t(k as StringKey))),
     ),
   );
-  for (const d of data.distributions) {
+  /* CURRENT versions only.
+     This section answers "what is each person owed", and a corrected night has
+     two versions of that answer: the one that was replaced and the one that
+     replaced it. Listing both put the same person on two rows for one night
+     with nothing in the row to say which was superseded, so a manager adding
+     the Share column up by hand got the night twice — the one arithmetic this
+     export exists to prevent (see the header of financial_period_export).
+     The replaced versions have not been hidden: section 2 carries every one of
+     them with its status and the ref of what replaced it, which is where the
+     lineage belongs. Section 1 keeps reporting both totals separately. */
+  for (const d of data.distributions.filter((x) => x.isCurrent)) {
     for (const m of d.members) {
       lines.push(
         row([

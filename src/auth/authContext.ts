@@ -36,6 +36,15 @@ export interface AuthValue {
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signUp: (name: string, email: string, password: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
+  /**
+   * Ask Supabase to email a recovery link. Always resolves ok when the
+   * request itself went through: whether the address has an account is not
+   * something the caller — or anyone typing addresses into the form — gets
+   * to learn.
+   */
+  requestPasswordReset: (email: string) => Promise<AuthResult>;
+  /** Set a new password for the session the recovery link established. */
+  setPassword: (password: string) => Promise<AuthResult>;
 }
 
 export const AuthContext = createContext<AuthValue | null>(null);

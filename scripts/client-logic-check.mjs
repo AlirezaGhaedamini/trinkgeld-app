@@ -432,7 +432,7 @@ check('79. distributions are numbered, and a correction names the row it replace
     lines.some((l) => l.includes('"D002"') && l.includes('"D001"')))
 check('80. worked time reads as a shift, not as a minute count',
   csvDuration(270) === '4:30' && csvDuration(450) === '7:30' && csvDuration(480) === '8:00' &&
-    file.includes('"4:30"') && file.includes('"7:30"') && file.includes('"8:00"'))
+    file.includes('"7:30"') && file.includes('"8:00"'))
 check('81. money is one German-decimal column, and a reversal keeps its sign',
   csvMoney(100000) === '1000,00' && csvMoney(-50000) === '-500,00' && file.includes('"-500,00"'))
 check('82. a member name that looks like a formula is defused, not executed',
@@ -489,6 +489,32 @@ check('91. a payout taken back in full reads as reversed, not as paid',
   buildCsv(reversedOut, en).includes(EN.csvReversedOut) && !file.includes(EN.csvReversedOut))
 check('92. …and a partial reversal shows what is left, signed correctly',
   file.includes('"500,00"'))
+
+/* ── section 3 lists CURRENT shares only (phase 3S-B) ───────────────────── */
+/* The 3S-A audit found a corrected night putting the same person on two rows —
+   the replaced version and the one that replaced it — under a heading that says
+   "what each person is owed", with nothing in the row to tell them apart. Adding
+   that column up by hand paid the night twice, which is the one arithmetic the
+   whole export exists to prevent. The replaced versions are still in section 2,
+   with their status and the ref of what replaced them. */
+const shareBlock = blocks[2].split(CSV_NEWLINE).filter(Boolean)
+const shareRows = shareBlock.slice(2) // the section heading, then the column header
+const cellsOf = (line) => line.split(';').map((c) => c.replace(/^"|"$/g, ''))
+const sharePeople = shareRows.map((l) => cellsOf(l)[2])
+const shareSum = shareRows.reduce(
+  (total, l) => total + Math.round(parseFloat(cellsOf(l)[6].replace(/\./g, '').replace(',', '.')) * 100),
+  0,
+)
+
+check('95. a corrected night lists each person once, not once per version',
+  sharePeople.length === new Set(sharePeople).size, sharePeople.join(' | '))
+check('96. …and the shares add up to exactly what the period says is owed',
+  shareSum === data.summary.currentEntitlementCents,
+  `${shareSum} vs ${data.summary.currentEntitlementCents}`)
+check('97. …while the replaced version is still on the record, in the distributions section',
+  blocks[1].includes('"D001"') && blocks[1].includes('"D002"'))
+check('98. …and section 3 no longer carries the replaced version at all',
+  !shareRows.some((l) => cellsOf(l)[1] === 'D001'), shareRows.map((l) => cellsOf(l)[1]).join(','))
 
 /* ── summary ─────────────────────────────────────────────────────────────── */
 console.log(`\n  ${pass} passed, ${fail} failed`);

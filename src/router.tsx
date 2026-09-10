@@ -10,6 +10,8 @@ import {
 
 import { SignInPage } from '@/pages/auth/SignInPage';
 import { SignUpPage } from '@/pages/auth/SignUpPage';
+import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
+import { NewPasswordPage } from '@/pages/auth/NewPasswordPage';
 import { JoinWorkplacePage } from '@/pages/auth/JoinWorkplacePage';
 import { SelectWorkplacePage } from '@/pages/auth/SelectWorkplacePage';
 
@@ -58,7 +60,17 @@ export function AppRoutes() {
       <Route element={<RequireNoSession />}>
         <Route element={<AppLayout />}>
           <Route path="/signin" element={<SignInPage />} />
+          <Route path="/reset" element={<ForgotPasswordPage />} />
         </Route>
+      </Route>
+
+      {/*
+        Where a recovery link lands. NOT wrapped in RequireNoSession: following
+        the link establishes a session, which is exactly what lets the password
+        be changed, and a guard here would bounce the person past it.
+      */}
+      <Route element={<AppLayout />}>
+        <Route path="/reset/new" element={<NewPasswordPage />} />
       </Route>
 
       {/*

@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/layout/Screen';
+import { SignOutButton } from '@/auth/SignOutButton';
 import { Card } from '@/components/ui/Card';
 import { ListRow } from '@/components/ui/ListRow';
 import { Lede } from '@/components/ui/Note';
@@ -54,6 +55,10 @@ export function SelectWorkplacePage() {
       </Card>
 
       {rows.length === 0 ? <p className={ui.note}>{t('wpNoneYet')}</p> : null}
+
+      {/* No active membership means no tab bar under this screen, and no
+          route to the profile screen that normally carries this. */}
+      {activeId === null ? <SignOutButton /> : null}
     </Screen>
   );
 }

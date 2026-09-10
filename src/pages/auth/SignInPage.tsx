@@ -154,6 +154,18 @@ export function SignInPage() {
           >
             {t('createAcc')}
           </Button>
+
+          {/* Real accounts only: the demo has no password to recover. */}
+          {real ? (
+            <Button
+              variant="ghost"
+              block
+              disabled={auth.busy}
+              onClick={() => navigate('/reset')}
+            >
+              {t('pwForgot')}
+            </Button>
+          ) : null}
         </form>
 
         {/* The role toggle belongs to the demo, where it picks which sample

@@ -740,6 +740,37 @@ export const EN = {
   authNetwork: "No connection. Check your network and try again.",
   authNotConfigured: "Sign-in is not set up on this device yet.",
   authUnknown: "Something went wrong. Please try again.",
+
+  /* ── password reset (phase 3S-B) ──────────────────────────────────────── */
+  /* The "if it has an account" wording is deliberate and appears in both the
+     prompt and the confirmation: telling somebody whether an address is
+     registered is telling anybody who asks. */
+  pwForgot: "Forgot your password?",
+  pwResetTitle: "Reset your password",
+  pwResetBody: "Enter the address you sign in with. If it has an account, we will send a link for setting a new password.",
+  pwResetSend: "Send the link",
+  pwResetSending: "Sending…",
+  pwResetSent: "Check your email",
+  pwResetSentBody: "If that address has an account, a link is on its way. It works once and then expires.",
+  pwResetBack: "Back to sign in",
+  pwNewTitle: "Set a new password",
+  pwNewBody: "Choose one you have not used here before.",
+  pwNewLabel: "New password",
+  pwNewSave: "Save the password",
+  pwNewSaving: "Saving…",
+  pwNewDone: "Your password is set",
+  pwNewDoneBody: "You can sign in with it now.",
+  pwLinkExpired: "That link is no longer valid",
+  pwLinkExpiredBody: "A reset link works once and then expires. Ask for a new one and use the newest email.",
+  pwResetAgain: "Send a new link",
+
+  /* ── the render-error fallback (phase 3S-B) ───────────────────────────── */
+  /* No stack, no error text, no blame. Only what happened and the two ways
+     out. */
+  ebTitle: "Something went wrong",
+  ebBody: "TipCrew ran into an unexpected problem on this screen. Nothing you entered was changed.",
+  ebReload: "Try again",
+  ebHome: "Back to the start",
   authCheckInbox: "Almost there",
   authCheckInboxBody: "We sent a confirmation link to your email. Open it, then sign in.",
   authSignedOut: "Signed out",
@@ -1695,6 +1726,30 @@ export const DE: Record<StringKey, string> = {
   authNetwork: "Keine Verbindung. Pr\u00fcfe dein Netzwerk und versuche es erneut.",
   authNotConfigured: "Die Anmeldung ist auf diesem Ger\u00e4t noch nicht eingerichtet.",
   authUnknown: "Da ist etwas schiefgelaufen. Bitte versuche es erneut.",
+
+  pwForgot: "Passwort vergessen?",
+  pwResetTitle: "Passwort zurücksetzen",
+  pwResetBody: "Gib die Adresse ein, mit der du dich anmeldest. Wenn es dazu ein Konto gibt, schicken wir einen Link für ein neues Passwort.",
+  pwResetSend: "Link senden",
+  pwResetSending: "Wird gesendet…",
+  pwResetSent: "Sieh in deinem Postfach nach",
+  pwResetSentBody: "Wenn es zu dieser Adresse ein Konto gibt, ist ein Link unterwegs. Er funktioniert einmal und läuft dann ab.",
+  pwResetBack: "Zurück zur Anmeldung",
+  pwNewTitle: "Neues Passwort setzen",
+  pwNewBody: "Wähle eins, das du hier noch nicht benutzt hast.",
+  pwNewLabel: "Neues Passwort",
+  pwNewSave: "Passwort speichern",
+  pwNewSaving: "Wird gespeichert…",
+  pwNewDone: "Dein Passwort ist gesetzt",
+  pwNewDoneBody: "Du kannst dich jetzt damit anmelden.",
+  pwLinkExpired: "Dieser Link ist nicht mehr gültig",
+  pwLinkExpiredBody: "Ein Link zum Zurücksetzen funktioniert einmal und läuft dann ab. Fordere einen neuen an und nutze die neueste E-Mail.",
+  pwResetAgain: "Neuen Link senden",
+
+  ebTitle: "Etwas ist schiefgelaufen",
+  ebBody: "TipCrew hatte auf diesem Bildschirm ein unerwartetes Problem. Nichts von dem, was du eingegeben hast, wurde verändert.",
+  ebReload: "Erneut versuchen",
+  ebHome: "Zurück zum Anfang",
   authCheckInbox: "Fast geschafft",
   authCheckInboxBody: "Wir haben dir einen Best\u00e4tigungslink geschickt. \u00d6ffne ihn und melde dich dann an.",
   authSignedOut: "Abgemeldet",

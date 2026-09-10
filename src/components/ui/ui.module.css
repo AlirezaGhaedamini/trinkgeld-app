@@ -823,3 +823,39 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ── the render-error fallback ───────────────────────────────────────────── */
+/* Only reachable when a render threw and ErrorBoundary caught it. It cannot
+   sit inside Screen: Screen belongs to the layout that may be what broke. So
+   it draws its own page, from the same tokens everything else uses. */
+.boundary {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: 40px 20px calc(40px + env(safe-area-inset-bottom));
+  background: var(--color-bg);
+  text-align: center;
+}
+
+.boundaryTitle {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.boundaryBody {
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--color-text-subtle);
+  margin: 0;
+}
+
+.boundaryActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
