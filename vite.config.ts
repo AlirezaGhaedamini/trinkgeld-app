@@ -17,5 +17,10 @@ export default defineConfig({
     },
   },
   server: { host: true, port: 5173 },
-  build: { outDir: 'dist', sourcemap: true },
+  // No source maps in the published build. They were on through development,
+  // and phase 3S-C turned them off for release: TipCrew ships no error
+  // monitoring that would consume them, so the only thing publishing them does
+  // is hand the whole readable source to anybody who opens devtools. A build
+  // that needs them for a one-off investigation can flip this locally.
+  build: { outDir: 'dist', sourcemap: false },
 });

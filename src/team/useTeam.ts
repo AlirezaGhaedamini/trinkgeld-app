@@ -134,5 +134,14 @@ export function useTeam() {
       areaId: string | null;
       workplaceRoleId: string | null;
     }) => run((c, m) => api.createInvitation(c, m, input)),
+
+    /**
+     * Deliver an invitation that already exists. Returns whether the email went
+     * out — never whether the invitation is valid, which it is either way. Not
+     * routed through run(): a failure here is not a failure of the screen's
+     * action and must not raise a toast of its own.
+     */
+    sendInvitationEmail: async (invitationId: string, token: string): Promise<boolean> =>
+      client ? api.sendInvitationEmail(client, invitationId, token) : false,
   };
 }

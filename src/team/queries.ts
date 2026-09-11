@@ -208,3 +208,35 @@ export async function createInvitation(
     token: (row as { token: string })?.token ?? '',
   };
 }
+
+/**
+ * Ask the Edge Function to email an invitation that ALREADY EXISTS.
+ *
+ * Best effort, and deliberately separate from createInvitation(): the row and
+ * the link are made first and stand on their own, so a provider that is down,
+ * unconfigured, or slow costs the manager an email, never an invitation. The
+ * caller decides what to say about the outcome; nothing here retries and
+ * nothing here creates state.
+ *
+ * The function is given the invitation id and the raw token only. It resolves
+ * the recipient from the invitation row and builds the link from its own
+ * APP_BASE_URL, so the browser cannot choose who gets mail or where it points.
+ */
+export async function sendInvitationEmail(
+  client: TipCrewClient,
+  invitationId: string,
+  token: string,
+): Promise<boolean> {
+  if (!invitationId || !token) return false;
+  try {
+    const { data, error } = await client.functions.invoke<{ sent?: boolean }>('send-invitation', {
+      body: { invitationId, token },
+    });
+    if (error) return false;
+    return data?.sent === true;
+  } catch {
+    // Offline, blocked, or the function is not deployed. Same answer either
+    // way: the manager copies the link.
+    return false;
+  }
+}

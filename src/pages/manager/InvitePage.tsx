@@ -49,6 +49,12 @@ function RealInvite() {
   const [link, setLink] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [invitedName, setInvitedName] = useState('');
+  /* Delivery is a separate story from the invitation. `pending` holds what is
+     needed to try again within this page session — the raw token is returned
+     once and is never fetched back, so a refresh ends the possibility of a
+     resend and the copy-link is what remains. */
+  const [pending, setPending] = useState<{ id: string; token: string; email: string } | null>(null);
+  const [mail, setMail] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
 
   const areas = useMemo(
     () => (config.state?.areas ?? []).filter((a) => !a.archived),
@@ -101,9 +107,25 @@ function RealInvite() {
     setLink(result.value?.token ? joinLinkFor(window.location, result.value.token) : null);
     setLinkCopied(false);
     setInvitedName(name.trim());
+    const sentTo = email.trim();
     setEmail('');
     setName('');
     show(t('tmInviteCreated'));
+
+    // The invitation exists and the link is on screen. Everything from here is
+    // delivery, and none of it can undo that.
+    const invitationId = result.value?.invitationId ?? '';
+    const token = result.value?.token ?? '';
+    if (!invitationId || !token) return;
+    setPending({ id: invitationId, token, email: sentTo });
+    setMail('sending');
+    setMail((await team.sendInvitationEmail(invitationId, token)) ? 'sent' : 'failed');
+  };
+
+  const retryEmail = async () => {
+    if (!pending || mail === 'sending') return;
+    setMail('sending');
+    setMail((await team.sendInvitationEmail(pending.id, pending.token)) ? 'sent' : 'failed');
   };
 
   const copyLink = async () => {
@@ -216,6 +238,29 @@ function RealInvite() {
               {linkCopied ? t('copied') : t('tmCopyLink')}
             </Button>
             <InfoNote icon="info">{t('tmInviteShare').replace('{name}', invitedName)}</InfoNote>
+
+            {/* Delivery, reported separately from the invitation on purpose.
+                The copy button above is always there, whatever this says. */}
+            {mail === 'sending' ? <InfoNote icon="info">{t('tmEmailSending')}</InfoNote> : null}
+            {mail === 'sent' ? (
+              <InfoNote icon="check">
+                {t('tmEmailSent').replace('{email}', pending?.email ?? '')}
+              </InfoNote>
+            ) : null}
+            {mail === 'failed' ? (
+              <>
+                <InfoNote icon="info">{t('tmEmailFailed')}</InfoNote>
+                <Button
+                  variant="secondary"
+                  quiet
+                  block
+                  disabled={team.busy}
+                  onClick={() => void retryEmail()}
+                >
+                  {t('tmEmailRetry')}
+                </Button>
+              </>
+            ) : null}
           </div>
         </Card>
       ) : null}

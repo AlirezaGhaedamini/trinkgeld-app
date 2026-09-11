@@ -516,6 +516,51 @@ check('97. …while the replaced version is still on the record, in the distribu
 check('98. …and section 3 no longer carries the replaced version at all',
   !shareRows.some((l) => cellsOf(l)[1] === 'D001'), shareRows.map((l) => cellsOf(l)[1]).join(','))
 
+/* ── the password-recovery callback URL (phase 3S-C) ─────────────────────── */
+/* The 3S-C human smoke found password reset landing on "this link is no longer
+   valid". The link was fine; the redirect was not. TipCrew routes on the
+   fragment, the redirect named a hash route, and GoTrue appends the PKCE code
+   to whatever it is given — so the code arrived INSIDE the fragment, where
+   supabase-js parses `url.hash.substring(1)` as a query string and finds a key
+   called "/reset/new?code" instead of "code".
+
+   These drive the REAL parser out of the installed @supabase/auth-js, so the
+   check fails if that behaviour ever changes, and pin the redirect shape that
+   works. */
+const { parseParametersFromURL } = await import(
+  pathToFileURL(resolve(ROOT, 'node_modules/@supabase/auth-js/dist/main/lib/helpers.js')).href
+).then((m) => m.default ?? m)
+
+/* recovery.ts reads the address bar at module scope, so the stub goes up first. */
+globalThis.window = { location: { origin: 'https://tipcrew.de', pathname: '/', search: '?tc=recovery' } }
+const authRecovery = await import(pathToFileURL(resolve(ROOT, 'src/auth/recovery.ts')).href)
+
+const codeIn = (url) => parseParametersFromURL(url).code
+
+check('99. the shape that broke it: a code after a fragment is invisible to supabase-js',
+  codeIn('https://tipcrew.de/#/reset/new?code=abc123') === undefined &&
+    Object.keys(parseParametersFromURL('https://tipcrew.de/#/reset/new?code=abc123'))[0] === '/reset/new?code')
+check('100. …while the same code in the query string is found, which is why signup always worked',
+  codeIn('https://tipcrew.de/?code=abc123') === 'abc123')
+
+const redirect = authRecovery.recoveryRedirectUrl({ origin: 'https://tipcrew.de', pathname: '/' })
+check('101. the recovery redirect carries NO fragment, so nothing can swallow the code',
+  !redirect.includes('#') && redirect === 'https://tipcrew.de/?tc=recovery', redirect)
+check('102. …and a code appended to it is still found by the real parser',
+  codeIn(`${redirect}&code=abc123`) === 'abc123')
+check('103. …with the marker surviving beside it, so the app knows which screen to open',
+  parseParametersFromURL(`${redirect}&code=abc123`).tc === 'recovery')
+check('104. a recovery landing is recognised from the address bar, before any async work',
+  authRecovery.isRecoveryCallback() === true)
+check('105. …and stops being recognised once the new password is saved',
+  (authRecovery.clearRecoveryCallback(), authRecovery.isRecoveryCallback() === false))
+check('106. …the PASSWORD_RECOVERY event is a second, independent way in',
+  (authRecovery.markRecoveryCallback(), authRecovery.isRecoveryCallback() === true))
+check('107. an ordinary load is not mistaken for a recovery',
+  (globalThis.window.location.search = '?code=abc123',
+   authRecovery.refreshRecoveryCallback(),
+   authRecovery.isRecoveryCallback() === false))
+
 /* ── summary ─────────────────────────────────────────────────────────────── */
 console.log(`\n  ${pass} passed, ${fail} failed`);
 if (fail > 0) {

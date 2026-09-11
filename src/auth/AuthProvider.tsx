@@ -5,6 +5,7 @@ import { AuthContext, type AuthStatus, type AuthValue } from '@/auth/authContext
 import { classifyAuthError } from '@/auth/errors';
 import { loadProfile, saveProfileLocale, type Profile } from '@/auth/profile';
 import { clearReturnTo } from '@/auth/returnTo';
+import { markRecoveryCallback, recoveryRedirectUrl } from '@/auth/recovery';
 import { clearPendingJoin } from '@/workplace/pendingJoin';
 import { getSupabase, isSupabaseConfigured, type TipCrewClient } from '@/lib/supabase';
 import { useI18n } from '@/hooks/useI18n';
@@ -98,8 +99,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled && alive.current) setStatus('signedOut');
       });
 
-    const { data: subscription } = client.auth.onAuthStateChange((_event, next) => {
+    const { data: subscription } = client.auth.onAuthStateChange((event, next) => {
       if (cancelled) return;
+      // supabase-js raises this once it has exchanged a recovery code, which it
+      // knows from the '/recovery' suffix it stored beside the PKCE verifier.
+      // A second, independent signal beside the URL marker read in recovery.ts;
+      // either alone is enough to route to the new-password screen.
+      if (event === 'PASSWORD_RECOVERY') markRecoveryCallback();
       void applySession(next);
     });
 
@@ -193,17 +199,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Where Supabase sends somebody who follows a recovery link.
    *
-   * Built from the page the app is actually served from, so it works from a
-   * sub-path and from a Capacitor WebView, and it names a HASH route because
-   * this app routes on the fragment. Whatever origin this resolves to has to
-   * be listed under Authentication → URL configuration → Redirect URLs, or
-   * Supabase will refuse to send people back here; docs/RELEASE_CHECKLIST.md
-   * carries that as a release item.
+   * It used to name the hash route `#/reset/new`, and that was the 3S-C reset
+   * bug: GoTrue appends `?code=…` to whatever it is given, so the code landed
+   * inside the fragment where supabase-js cannot parse it. The redirect now
+   * carries no fragment and marks itself with a query parameter instead — see
+   * src/auth/recovery.ts for the full trace.
+   *
+   * Whatever origin this resolves to must be listed under Authentication → URL
+   * Configuration → Redirect URLs; docs/RELEASE_CHECKLIST.md carries that.
    */
-  const recoveryRedirect = useCallback(
-    () => `${window.location.origin}${window.location.pathname}#/reset/new`,
-    [],
-  );
+  const recoveryRedirect = useCallback(() => recoveryRedirectUrl(window.location), []);
 
   const requestPasswordReset = useCallback<AuthValue['requestPasswordReset']>(
     async (email) => {

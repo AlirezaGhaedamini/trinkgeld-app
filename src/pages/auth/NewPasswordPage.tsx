@@ -4,6 +4,7 @@ import { Screen } from '@/components/layout/Screen';
 import { Button } from '@/components/ui/Button';
 import { Lede } from '@/components/ui/Note';
 import { AUTH_FAILURE_KEY } from '@/auth/errors';
+import { clearRecoveryCallback } from '@/auth/recovery';
 import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
@@ -41,6 +42,8 @@ export function NewPasswordPage() {
     const result = await auth.setPassword(password);
     if (result.ok) {
       setPassword('');
+      // Stop the redirector sending them back here for the rest of this load.
+      clearRecoveryCallback();
       setDone(true);
       return;
     }

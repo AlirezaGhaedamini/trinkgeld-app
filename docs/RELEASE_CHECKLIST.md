@@ -47,34 +47,102 @@ Nothing here is automated. Work top to bottom at the release commit.
 
 - [ ] Site URL is the production origin (Supabase → Authentication → URL
       configuration).
-- [ ] **Redirect URLs** include the production origin and the hash routes the app
-      returns people to:
-      - `https://<host>/` — email confirmation
-      - `https://<host>/#/reset/new` — **password recovery** (built by
-        `AuthProvider.recoveryRedirect()`; without it Supabase refuses to send
-        people back and the reset link dead-ends)
-      - `https://<host>/#/join` — invitation landing
+- [ ] **Redirect URLs.** For `https://tipcrew.de` add BOTH of these under
+      Authentication → URL Configuration → Redirect URLs:
+
+          https://tipcrew.de
+          https://tipcrew.de/**
+
+      The wildcard entry is what covers the recovery redirect, which carries a
+      query parameter: `https://tipcrew.de/?tc=recovery`.
+
+      **A redirect for an auth callback must never contain a `#`.** GoTrue
+      appends the PKCE code to whatever it is given, so a fragment in the
+      redirect swallows the code and supabase-js never finds it — that was the
+      3S-C password-reset failure. `AuthProvider.recoveryRedirect()` now builds
+      a fragment-free URL and the app routes to the reset screen itself; the
+      offline checks pin it (`client-logic-check.mjs`, checks 99–107).
+      Signup confirmation passes no redirect at all and uses the Site URL.
 - [ ] Email confirmation is **on**.
-- [ ] **An SMTP sender is configured.** Supabase's built-in sender is rate
-      limited to a handful of messages an hour, which is not enough to onboard a
-      team: confirmation and password-recovery mail both depend on it. Configure
-      a custom SMTP provider and a verified sending domain, and send one test of
-      each before opening signups.
+- [ ] **Custom SMTP is configured on the project.** Supabase's built-in sender
+      is rate limited to a handful of messages an hour, which is not enough to
+      onboard a team, and BOTH signup confirmation and password recovery depend
+      on it. This is separate from the invitation Edge Function: deploying that
+      function does NOT configure Supabase Auth mail.
+      Authentication → Emails → SMTP Settings, using Resend as the SMTP relay:
+      - Host `smtp.resend.com`, port `465`, username `resend`
+      - Password: a Resend API key (created in Resend, pasted into Supabase,
+        never into this repository)
+      - Sender address on the verified domain, e.g. `no-reply@<domain>`
+      - Sender name `TipCrew`
+- [ ] One confirmation email and one recovery email received and followed on a
+      real device before signups open.
 - [ ] Password policy (minimum length, leaked-password protection, rate limits)
       is set on the project. The client does not enforce one; it reports what
       the server refuses.
 - [ ] The two accounts from `.env.test.local` do **not** exist on production.
 
+## 3b. Invitation email (Edge Function)
+
+Invitation delivery is best effort and sits on top of a flow that already works:
+`create_invitation()` mints the row and returns the raw token once, the manager
+can always copy the link. If any item here is not done, invitations still work —
+managers just copy links by hand, and the screen says so.
+
+- [ ] Resend account with the **sending domain verified** (SPF and DKIM records
+      published and green in Resend).
+- [ ] `INVITE_FROM_ADDRESS` is on that verified domain.
+- [ ] Function deployed: `supabase functions deploy send-invitation`.
+- [ ] Secrets set on the project, never in the repository:
+      `supabase secrets set RESEND_API_KEY=… INVITE_FROM_ADDRESS=… APP_BASE_URL=…`
+      - `APP_BASE_URL` is the production origin **without** a trailing slash;
+        the function appends `/#/join?token=…` itself so the browser cannot
+        choose where the email points.
+- [ ] `supabase secrets list` shows the three names and no others are expected.
+- [ ] The function uses **no service-role key** — it authorises the caller with
+      their own JWT against normal RLS. Confirm none is set for it.
+- [ ] End-to-end on staging: invite a test address, the email arrives, the CTA
+      opens the join screen for the right workplace, and accepting works.
+- [ ] Failure path once, on purpose: unset the key or use a bad from-address and
+      confirm the screen says the email could not be sent, the invitation is
+      still listed as pending, and Copy invitation link still works.
+
 ## 4. Transport and hosting
 
 - [ ] Served over HTTPS only.
-- [ ] Security headers set at the host or CDN: `Strict-Transport-Security`,
-      `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
-      `X-Frame-Options: DENY`. No hosting configuration is committed in this
-      repository, so this is done wherever the site is served from.
-- [ ] **Source maps.** `vite.config.ts` emits them and `dist/` will contain
-      `.map` files. Decide one: publish them (accepting that the source is
-      readable) or strip them from the upload. Record which was chosen.
+- [ ] **Security headers** set at the host or CDN. No hosting configuration is
+      committed here — the deployment target is not chosen in this repository —
+      so these are the exact values to enter wherever the site is served from:
+
+      Strict-Transport-Security: max-age=31536000; includeSubDomains
+      X-Content-Type-Options: nosniff
+      Referrer-Policy: strict-origin-when-cross-origin
+      Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+      Content-Security-Policy:
+        default-src 'self';
+        connect-src 'self' https://<ref>.supabase.co wss://<ref>.supabase.co;
+        img-src 'self' data:;
+        style-src 'self' 'unsafe-inline';
+        script-src 'self';
+        font-src 'self';
+        frame-ancestors 'none';
+        base-uri 'self';
+        form-action 'self'
+
+      Notes that matter: `connect-src` must name the project host or PostgREST,
+      Auth and the Edge Function are all blocked. `frame-ancestors 'none'`
+      replaces X-Frame-Options. `style-src` needs `'unsafe-inline'` because the
+      few inline styles the app uses would otherwise be dropped. Resend is
+      called from the Edge Function, server to server, and needs no browser
+      permission at all. Auth redirects are same-origin hash routes, so
+      `form-action 'self'` does not affect them.
+- [ ] Load the deployed site with devtools open and confirm no CSP violation is
+      reported on sign-in, on the invite screen, and on a period export.
+- [x] **Source maps: off.** `vite.config.ts` sets `build.sourcemap: false` as of
+      phase 3S-C, and a release build produces no `.map` files. TipCrew ships no
+      error monitoring that would consume them, so publishing them would only
+      hand the readable source to anyone opening devtools. Verify with
+      `ls dist/assets/*.map` — it must find nothing.
 - [ ] The build is `npm run build` from a clean tree at the tagged commit.
 - [ ] No server rewrites are needed (HashRouter). If the host adds them, they
       must not swallow the fragment.
@@ -175,10 +243,12 @@ On a real phone, at 320 px and 430 px, in EN and then DE.
 
 ## 11. What is deliberately not configured
 
-- **No email delivery of invitations.** Invitation links are copied by the
-  manager and handed over. Server-side delivery is phase 3S-C work and is NOT
-  done. The UI does not claim otherwise. (SMTP in §3 is still required — it is
-  what carries confirmation and password-recovery mail.)
+- **Invitation email is best effort, not a dependency.** The Edge Function in
+  §3b sends the link when it can; the manager can always copy it instead, and
+  the screen says which happened. An invitation is never lost to a mail failure.
+- **No delivery history.** Nothing records that an email was sent: there is no
+  `delivered_at` column and no migration was added for one. What a manager sees
+  is the outcome of the attempt they just made, in that page session.
 - No storage buckets, no cron, no external service besides Supabase.
 - No PDF export: the CSV is the record (`docs/BACKEND.md §4l`).
 - No monitoring or error reporting service.

@@ -745,6 +745,14 @@ export const EN = {
   /* The "if it has an account" wording is deliberate and appears in both the
      prompt and the confirmation: telling somebody whether an address is
      registered is telling anybody who asks. */
+  /* ── invitation email delivery (phase 3S-C) ───────────────────────────── */
+  /* Delivery is best effort on top of an invitation that already exists, so
+     none of this copy may suggest the invitation itself failed. */
+  tmEmailSending: "Sending the invitation…",
+  tmEmailSent: "Invitation emailed to {email}.",
+  tmEmailFailed: "The email could not be sent — the invitation is still valid. Copy the link and send it yourself.",
+  tmEmailRetry: "Try sending the email again",
+
   pwForgot: "Forgot your password?",
   pwResetTitle: "Reset your password",
   pwResetBody: "Enter the address you sign in with. If it has an account, we will send a link for setting a new password.",
@@ -1726,6 +1734,11 @@ export const DE: Record<StringKey, string> = {
   authNetwork: "Keine Verbindung. Pr\u00fcfe dein Netzwerk und versuche es erneut.",
   authNotConfigured: "Die Anmeldung ist auf diesem Ger\u00e4t noch nicht eingerichtet.",
   authUnknown: "Da ist etwas schiefgelaufen. Bitte versuche es erneut.",
+
+  tmEmailSending: "Einladung wird gesendet…",
+  tmEmailSent: "Einladung an {email} gesendet.",
+  tmEmailFailed: "Die E-Mail konnte nicht gesendet werden — die Einladung gilt trotzdem. Kopiere den Link und schicke ihn selbst.",
+  tmEmailRetry: "E-Mail erneut senden",
 
   pwForgot: "Passwort vergessen?",
   pwResetTitle: "Passwort zurücksetzen",

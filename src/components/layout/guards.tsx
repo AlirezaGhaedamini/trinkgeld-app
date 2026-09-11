@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthSplash } from '@/auth/AuthSplash';
 import { clearReturnTo, peekReturnTo } from '@/auth/returnTo';
+import { isRecoveryCallback } from '@/auth/recovery';
 import { useAppState } from '@/hooks/useAppState';
 import { useAuth, useRealAuth } from '@/hooks/useAuth';
 import { useActiveRole, useWorkplace } from '@/hooks/useWorkplace';
@@ -141,6 +142,14 @@ export function HomeRedirect() {
   }, [gate, settled]);
 
   if (gate === 'pending') return <AuthSplash />;
+
+  /* A recovery link lands here, not on a hash route: the redirect must carry no
+     fragment or the PKCE code is swallowed by it (src/auth/recovery.ts). So the
+     one thing this redirector does before anything else is send a recovery
+     callback to the screen it came for — ahead of the signed-out check too,
+     because the session may still be being exchanged. */
+  if (isRecoveryCallback()) return <Navigate to="/reset/new" replace />;
+
   if (gate === 'out') return <Navigate to="/signin" replace />;
 
   if (workplace.enabled) {
