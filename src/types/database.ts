@@ -1979,6 +1979,13 @@ export type Database = {
           requester_name: string
         }[]
       }
+      team_member_emails: {
+        Args: { p_workplace_id: string }
+        Returns: {
+          member_id: string
+          email: string
+        }[]
+      }
       query_distribution: {
         Args: { p_distribution_id: string; p_note: string }
         Returns: number

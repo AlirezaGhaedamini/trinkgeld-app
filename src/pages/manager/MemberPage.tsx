@@ -177,6 +177,14 @@ function RealMember() {
           <p className={styles.identityMeta}>
             {roleLabel} · {areaLabel}
           </p>
+          {/* Shown, never editable: it is the account's address, and migration
+              39 keeps it out of everyone's hands, a manager's included. Allowed
+              to wrap anywhere so a long address cannot overflow the header. */}
+          {member.email ? (
+            <p className={styles.identityMeta} style={{ overflowWrap: 'anywhere' }}>
+              {member.email}
+            </p>
+          ) : null}
         </div>
       </div>
 

@@ -561,6 +561,66 @@ check('107. an ordinary load is not mistaken for a recovery',
    authRecovery.refreshRecoveryCallback(),
    authRecovery.isRecoveryCallback() === false))
 
+/* ── team email addresses (phase 3S-C, migration 40) ─────────────────────── */
+/* Managers see each member's email. The database half — who may call
+   team_member_emails() — is pinned by supabase/tests/26_team_member_emails.sql.
+   These pin the client half: the address lands on the right member, never on a
+   placeholder, and a failed lookup costs the manager the addresses, never the
+   roster. */
+const teamTypes = await import(pathToFileURL(resolve(ROOT, 'src/team/types.ts')).href)
+const teamQueries = await import(pathToFileURL(resolve(ROOT, 'src/team/queries.ts')).href)
+
+const memberRow = (over = {}) => ({
+  id: 'm-1', workplace_id: 'w-1', user_id: 'u-1', display_name: 'Lena', role: 'employee',
+  area_id: null, workplace_role_id: null, multiplier: 1, status: 'active',
+  employee_number: null, joined_at: null, left_at: null, created_at: '', updated_at: '', ...over,
+})
+
+check('108. a member with an account carries the email it was given',
+  teamTypes.toTeamMember(memberRow(), null, 'lena@cafe.de').email === 'lena@cafe.de')
+check('109. …a roster placeholder never does, even if one is passed in',
+  teamTypes.toTeamMember(memberRow({ user_id: null }), null, 'stray@cafe.de').email === null)
+check('110. …and no address at all is null, not an empty string',
+  teamTypes.toTeamMember(memberRow(), null).email === null)
+
+/* A fake client, just enough of supabase-js for fetchTeam(): from().select().eq()
+   chains resolve to a table's rows; rpc() answers per function name. */
+function fakeClient({ members, emails }) {
+  const table = (rows) => {
+    const q = { select: () => q, eq: () => q, then: (ok) => ok({ data: rows, error: null }) }
+    return q
+  }
+  return {
+    from: (name) => table(name === 'workplace_members' ? members : []),
+    rpc: async (fn) => {
+      if (fn === 'pending_join_requests') return { data: [], error: null }
+      if (fn === 'team_member_emails') return emails()
+      throw new Error('unexpected rpc ' + fn)
+    },
+  }
+}
+const membership = { id: 'self', workplaceId: 'w-1' }
+const roster = [memberRow({ id: 'm-1', display_name: 'Anna' }), memberRow({ id: 'm-2', user_id: null, display_name: 'Ben' })]
+
+const withEmails = await teamQueries.fetchTeam(
+  fakeClient({ members: roster, emails: async () => ({ data: [{ member_id: 'm-1', email: 'anna@cafe.de' }], error: null }) }),
+  membership)
+check('111. the Team roster shows each address against the member it belongs to',
+  withEmails.members.find((m) => m.id === 'm-1')?.email === 'anna@cafe.de' &&
+  withEmails.members.find((m) => m.id === 'm-2')?.email === null)
+
+const refused = await teamQueries.fetchTeam(
+  fakeClient({ members: roster, emails: async () => ({ data: null, error: { code: '42501', message: 'only a manager' } }) }),
+  membership)
+check('112. a REFUSED lookup still loads the whole roster, just without addresses',
+  refused.members.length === 2 && refused.members.every((m) => m.email === null))
+
+const missing = await teamQueries.fetchTeam(
+  fakeClient({ members: roster, emails: async () => { throw new Error('function team_member_emails does not exist') } }),
+  membership)
+check('113. …and so does a frontend that reached production before migration 40',
+  missing.members.length === 2 && missing.members.every((m) => m.email === null))
+
 /* ── summary ─────────────────────────────────────────────────────────────── */
 console.log(`\n  ${pass} passed, ${fail} failed`);
 if (fail > 0) {

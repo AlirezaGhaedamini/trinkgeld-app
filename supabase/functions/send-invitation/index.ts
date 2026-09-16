@@ -96,6 +96,10 @@ interface Copy {
   expiry: string;
   fallback: string;
   personal: string;
+  /** Label for the workplace code — the app's own on-screen wording. */
+  codeLabel: string;
+  /** What to do with the code, including that the manager confirms it. */
+  codeFallback: string;
   signoff: string;
 }
 
@@ -109,6 +113,8 @@ function copyFor(locale: string, name: string, workplace: string, days: number):
       expiry: `This invitation is valid for ${days} days.`,
       fallback: 'If the button does not work, copy this link into your browser:',
       personal: 'The link is personal and can be used once.',
+      codeLabel: 'Workplace code',
+      codeFallback: `If the link does not work either, open TipCrew, choose Ask to join and enter this code for ${workplace}. Your manager then confirms the request.`,
       signoff: 'TipCrew',
     };
   }
@@ -120,12 +126,22 @@ function copyFor(locale: string, name: string, workplace: string, days: number):
     expiry: `Diese Einladung ist ${days} Tage gültig.`,
     fallback: 'Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:',
     personal: 'Der Link ist persönlich und kann einmal verwendet werden.',
+    codeLabel: 'Betriebs-Code',
+    codeFallback: `Falls auch der Link nicht funktioniert, öffne TipCrew, wähle „Beitritt anfragen“ und gib diesen Code für ${workplace} ein. Deine Leitung bestätigt die Anfrage dann.`,
     signoff: 'TipCrew',
   };
 }
 
-function renderHtml(c: Copy, link: string): string {
+function renderHtml(c: Copy, link: string, code: string | null): string {
   const safeLink = escapeHtml(link);
+  // The email's existing body and secondary-text styles, reused. Only the code
+  // itself gets a fixed-width face and a little tracking: it is the one thing
+  // here somebody may have to read off one screen and type into another.
+  const codeBlock = code
+    ? `
+    <p style="margin:18px 0 6px;font-size:15px;line-height:1.55;">${escapeHtml(c.codeLabel)}: <strong style="letter-spacing:.08em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">${escapeHtml(code)}</strong></p>
+    <p style="margin:0;font-size:13px;line-height:1.5;color:#6b6b66;">${escapeHtml(c.codeFallback)}</p>`
+    : '';
   return `<!doctype html>
 <html><body style="margin:0;padding:24px;background:#f6f6f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1c1c1a;">
   <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:14px;padding:28px;">
@@ -137,13 +153,13 @@ function renderHtml(c: Copy, link: string): string {
     </p>
     <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#6b6b66;">${escapeHtml(c.expiry)} ${escapeHtml(c.personal)}</p>
     <p style="margin:14px 0 6px;font-size:13px;line-height:1.5;color:#6b6b66;">${escapeHtml(c.fallback)}</p>
-    <p style="margin:0;font-size:13px;line-height:1.5;word-break:break-all;"><a href="${safeLink}" style="color:#3f6d55;">${safeLink}</a></p>
+    <p style="margin:0;font-size:13px;line-height:1.5;word-break:break-all;"><a href="${safeLink}" style="color:#3f6d55;">${safeLink}</a></p>${codeBlock}
     <p style="margin:24px 0 0;font-size:13px;color:#6b6b66;">${escapeHtml(c.signoff)}</p>
   </div>
 </body></html>`;
 }
 
-function renderText(c: Copy, link: string): string {
+function renderText(c: Copy, link: string, code: string | null): string {
   return [
     c.heading,
     '',
@@ -152,6 +168,7 @@ function renderText(c: Copy, link: string): string {
     `${c.cta}: ${link}`,
     '',
     `${c.expiry} ${c.personal}`,
+    ...(code ? ['', `${c.codeLabel}: ${code}`, c.codeFallback] : []),
     '',
     c.signoff,
   ].join('\n');
@@ -236,9 +253,32 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const { data: workplace } = await supabase
     .from('workplaces')
-    .select('name')
+    .select('name, join_code, join_code_enabled')
     .eq('id', invitation.workplace_id)
     .maybeSingle();
+
+  /**
+   * The workplace code, as a second way in — and only when it is one.
+   *
+   * Safe to put in an email because it is not a credential. request_join()
+   * (migration 07) turns a code into a PENDING join request and nothing more: the
+   * role is hard-coded to employee, and only approve_join_request(), which
+   * requires a manager of that workplace, turns a request into a membership. It
+   * is also meant to be passed around: its alphabet drops I, O, 0 and 1 because
+   * it "gets read out over the phone in a loud room", and the invite screen
+   * already shows it to managers with a Copy button. Members read it under
+   * workplaces_select_member, so nothing is added to what this caller may see.
+   *
+   * Left out when join_code_enabled is off, because request_join() refuses a
+   * disabled code and printing it would send the person to a dead end. The
+   * one-time invitation link is untouched and stays the primary action.
+   */
+  const joinCode =
+    workplace?.join_code_enabled === true &&
+    typeof workplace.join_code === 'string' &&
+    /^[A-Za-z0-9]{4,12}$/.test(workplace.join_code)
+      ? workplace.join_code.toUpperCase()
+      : null;
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -283,8 +323,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         from: FROM,
         to: [invitation.email],
         subject: copy.subject,
-        html: renderHtml(copy, link),
-        text: renderText(copy, link),
+        html: renderHtml(copy, link, joinCode),
+        text: renderText(copy, link, joinCode),
       }),
     });
 

@@ -33,13 +33,45 @@ import {
   type TeamState,
 } from '@/team/types';
 
+/**
+ * The team's email addresses, keyed by membership id.
+ *
+ * Read through team_member_emails() (migration 40) because nothing else can
+ * give them: public.profiles is readable only by its owner, so a manager's JWT
+ * cannot select another member's profile at all. The function refuses anyone
+ * but an active manager of this workplace and returns the address and nothing
+ * else — not the profile, and nothing from any other workplace.
+ *
+ * Deliberately NOT fatal. The roster is the screen; an address is a detail on
+ * it. If the lookup fails — offline, or a frontend that reached production
+ * before migration 40 did — members still load, just without addresses, rather
+ * than the whole Team area turning into an error. fetchTeam() stays strict
+ * about everything the screen cannot do without.
+ */
+export async function fetchMemberEmails(
+  client: TipCrewClient,
+  workplaceId: string,
+): Promise<Map<string, string>> {
+  const emails = new Map<string, string>();
+  try {
+    const { data, error } = await client.rpc('team_member_emails', { p_workplace_id: workplaceId });
+    if (error) return emails;
+    for (const row of data ?? []) {
+      if (row.member_id && row.email) emails.set(row.member_id, row.email);
+    }
+  } catch {
+    /* the roster does not depend on this */
+  }
+  return emails;
+}
+
 export async function fetchTeam(
   client: TipCrewClient,
   membership: Membership,
 ): Promise<TeamState> {
   const workplaceId = membership.workplaceId;
 
-  const [membersRes, invitesRes, requestsRes] = await Promise.all([
+  const [membersRes, invitesRes, requestsRes, emails] = await Promise.all([
     client.from('workplace_members').select('*').eq('workplace_id', workplaceId),
     client
       .from('invitations')
@@ -48,13 +80,14 @@ export async function fetchTeam(
       .eq('kind', 'invite')
       .eq('status', 'pending'),
     client.rpc('pending_join_requests', { p_workplace_id: workplaceId }),
+    fetchMemberEmails(client, workplaceId),
   ]);
   if (membersRes.error) throw membersRes.error;
   if (invitesRes.error) throw invitesRes.error;
   if (requestsRes.error) throw requestsRes.error;
 
   const members = (membersRes.data ?? [])
-    .map((row) => toTeamMember(row, membership.id))
+    .map((row) => toTeamMember(row, membership.id, emails.get(row.id) ?? null))
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
   const requests: PendingRequest[] = (

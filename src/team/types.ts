@@ -31,6 +31,15 @@ export interface TeamMember {
   multiplier: number;
   /** Null for a roster placeholder nobody has claimed yet. */
   hasAccount: boolean;
+  /**
+   * The member's account email, for a manager's eyes only.
+   *
+   * Comes from team_member_emails() (migration 40), which refuses anyone but an
+   * active manager of this workplace. Null when there is no account behind the
+   * row, when the profile has no address, or when the lookup could not be made —
+   * the screen then shows nothing rather than an invented or stale address.
+   */
+  email: string | null;
   joinedAt: string | null;
   leftAt: string | null;
   /** True for the signed-in manager's own membership. */
@@ -73,6 +82,7 @@ export interface MemberPatch {
 export function toTeamMember(
   row: Tables<'workplace_members'>,
   selfMembershipId: string | null,
+  email: string | null = null,
 ): TeamMember {
   return {
     id: row.id,
@@ -83,6 +93,8 @@ export function toTeamMember(
     workplaceRoleId: row.workplace_role_id,
     multiplier: Number(row.multiplier),
     hasAccount: row.user_id !== null,
+    // An address only ever belongs to a row with an account behind it.
+    email: row.user_id !== null ? email : null,
     joinedAt: row.joined_at,
     leftAt: row.left_at,
     isSelf: row.id === selfMembershipId,

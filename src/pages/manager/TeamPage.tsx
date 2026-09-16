@@ -98,26 +98,45 @@ function RealTeam() {
     show(result.ok ? t('tmRevoked') : t(TEAM_FAILURE_KEY[result.failure ?? 'unknown']));
   };
 
-  const row = (member: TeamMember) => (
+  const row = (member: TeamMember) => {
+    const details =
+      [
+        roleName(member.workplaceRoleId),
+        member.role === 'manager' ? t('mgrRole') : null,
+        member.status === 'active' ? null : t(STATUS_KEY[member.status]),
+        member.isSelf ? t('tmYou') : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || t('tmNoRole');
+    return (
     <ListRow
       key={member.id}
       leading={<Avatar name={member.displayName} />}
       title={member.displayName}
       meta={
-        [
-          roleName(member.workplaceRoleId),
-          member.role === 'manager' ? t('mgrRole') : null,
-          member.status === 'active' ? null : t(STATUS_KEY[member.status]),
-          member.isSelf ? t('tmYou') : null,
-        ]
-          .filter(Boolean)
-          .join(' · ') || t('tmNoRole')
+        /* The address on a line of its own, in the same meta type, so the
+           details above it read exactly as they did. Truncated rather than
+           wrapped: an email has no spaces to break at, and a long one would
+           otherwise push the row wider than a 320 px screen. The full address
+           is on the member's own screen. Members without one keep their row
+           exactly as it was. */
+        member.email ? (
+          <>
+            {details}
+            <span className={ui.truncate} style={{ display: 'block' }}>
+              {member.email}
+            </span>
+          </>
+        ) : (
+          details
+        )
       }
       onClick={() => navigate(`/manager/team/${member.id}`)}
       chevron
       trailing={<PointsBadge>×{num(member.multiplier, 2)}</PointsBadge>}
     />
-  );
+    );
+  };
 
   /* Nothing is shown as "nobody here" until the roster has actually arrived:
      a slow or failed fetch is said out loud instead. */
