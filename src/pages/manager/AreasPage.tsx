@@ -53,7 +53,7 @@ export function AreasPage() {
 
   if (!config.enabled) {
     return (
-      <Screen title={t('cfgAreasTitle')} back="arrow">
+      <Screen title={t('cfgAreasTitle')} back="arrow" backTo="/manager/settings">
         <EmptyState title={t('ruleReadOnly')} />
       </Screen>
     );
@@ -139,7 +139,7 @@ export function AreasPage() {
   return (
     <Screen
       title={t('cfgAreasTitle')}
-      back="arrow"
+      back="arrow" backTo="/manager/settings"
       action={
         live.length > 1
           ? {

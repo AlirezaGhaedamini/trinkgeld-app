@@ -200,7 +200,12 @@ managers just copy links by hand, and the screen says so.
 On a real phone, at 320 px and 430 px, in EN and then DE.
 
 - [ ] Sign up, confirm by email, create a workplace.
-- [ ] Rules: set area shares to 100, choose a method, activate.
+- [ ] Settings: Edit the rules, set Areas in the pool to 100, choose a method
+      under Within an area, go back to Settings, activate. The overview shows
+      the new version and the new values.
+- [ ] Settings: change a value, open Areas and come back — the change is still
+      there. Tap Team: "Discard changes?" appears; Continue editing keeps it,
+      Discard changes leaves and the active rules are unchanged.
 - [ ] Team: invite someone, copy the link, and confirm the screen does not claim
       an email was sent.
 - [ ] Review hours: approve one shift, reject another with a note.
@@ -208,7 +213,8 @@ On a real phone, at 320 px and 430 px, in EN and then DE.
 - [ ] Calculate, check the split, send.
 - [ ] Record a payout; reverse it; record it again.
 - [ ] Correct a sent distribution and publish the correction.
-- [ ] Period close: find it from Rules, check readiness, close, download the CSV.
+- [ ] Period close: find it under Settings → Financial records, check
+      readiness, close, download the CSV.
 - [ ] Open the CSV in Excel: four sections, no `#####`, umlauts intact, and each
       person appears **once** in the shares section for a corrected night.
 - [ ] Sign out from Profile.

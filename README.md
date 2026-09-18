@@ -268,7 +268,9 @@ queries, `components/ui` knows nothing about tips, `components/domain` does.
 | `/manager/invite` | manager | Workplace code and pending invites |
 | `/manager/distributions` | manager | All distributions, filterable |
 | `/manager/distributions/:id` | manager | One distribution in full |
-| `/manager/rules` | manager | Areas, method, minimum shared time |
+| `/manager/settings` | manager | Settings overview: the active rule version and every setting, one row each |
+| `/manager/settings/pool` · `/working-together` · `/within-area` · `/minimum-shared-time` · `/rounding` · `/confirmation` | manager | One rule section each; they edit one shared draft, activated together |
+| `/manager/settings/areas` · `/roles` · `/workplace` · `/period` | manager | Areas, role points, workplace settings, period close & export |
 
 Manager routes are guarded (`src/components/layout/guards.tsx`). An employee who
 lands on one is sent back to their own home with a "Managers only" message. When
@@ -318,7 +320,7 @@ Four settings keep sensible defaults, because they are configuration rather than
 user content and an app with no rule at all is worse than one with a starting
 rule: the split method (hours × role points), the minimum shared time (15 min),
 whether employees must confirm, and which area absorbs rounding. All four are
-editable on the Rules screen.
+editable under Settings.
 
 The account holder is created the moment you sign in. The name comes from what
 you typed at sign-up, or is derived from your email address if you used the

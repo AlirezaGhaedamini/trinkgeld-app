@@ -51,6 +51,18 @@ sehen muss — im Demo-Modus darf kein einziger Supabase-Call rausgehen.
 `HashRouter` ist Absicht: kein Server-Rewrite nötig, funktioniert aus einem
 Unterpfad und später in einer Capacitor-WebView.
 
+**Einstellungen (Manager).** Der frühere lange „Regeln“-Screen ist ein Index
+(`src/pages/manager/SettingsPage.tsx`) plus ein Screen pro Regelabschnitt
+(`Settings*Page.tsx`) unter `/manager/settings/*`; `/manager/rules*` leitet
+dorthin um. Der ganze Teilbaum hängt an **einem** `RuleEditorProvider`
+(`src/rules/RuleEditorProvider.tsx`, Layout-Route): die Änderungen leben nur im
+Speicher und werden erst beim Aktivieren über `saveAndActivate()` geschrieben —
+**nie** früher, denn Schritt 2 des Verteil-Assistenten aktiviert einen offenen
+Entwurf mit. Aktivieren/Verwerfen gibt es nur auf der Übersicht. Wer den
+Teilbaum mit offenen Änderungen verlässt, wird gefragt
+(`src/components/layout/useLeaveGuard.ts` — ohne Data-Router gibt es kein
+`useBlocker`).
+
 ## Verzeichnisstruktur
 
 ```
@@ -197,7 +209,7 @@ Vier Begriffe, ohne die nichts Sinn ergibt:
 Abgeleitet aus dem Code, mit Beleg.
 
 - **Named Exports überall.** Einzige `export default`-Datei ist `src/App.tsx`.
-- **Dateinamen:** Seiten `PascalCasePage.tsx` (`src/pages/manager/RulesPage.tsx`),
+- **Dateinamen:** Seiten `PascalCasePage.tsx` (`src/pages/manager/SettingsPage.tsx`),
   Komponenten `PascalCase.tsx`, Domänenmodule und `lib/` kleingeschrieben
   (`src/period/csv.ts`), Hooks `useX.ts`.
 - **Imports immer über `@/`**, nie relativ über Ordnergrenzen

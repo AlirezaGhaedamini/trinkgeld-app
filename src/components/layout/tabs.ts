@@ -5,7 +5,7 @@
  * The tab bar used to render on four manager routes only, so "which tab am I
  * in" never had to answer for anything but those four exact paths. Now that the
  * bar stays under the manager's pushed screens as well — a distribution, a
- * member, a rules subpage, the period close — the question is real: a manager
+ * member, a settings subpage, the period close — the question is real: a manager
  * reading a distribution is in History, and a manager inviting somebody is in
  * Team, and neither pathname starts with the tab's own path.
  *
@@ -16,7 +16,7 @@
  * drives the same function the bar does.
  */
 
-/** Longest-prefix wins, so `/manager/rules/period` beats `/manager/rules`. */
+/** Longest-prefix wins, so `/manager/settings/period` beats `/manager/settings`. */
 interface TabRule {
   /** The pathname, or the pathname prefix, this rule matches. */
   match: string;
@@ -42,9 +42,10 @@ const MANAGER_RULES: readonly TabRule[] = [
   { match: '/manager/invite', tab: '/manager/team' },
   // Configuration, including every subpage of it. The account screen is
   // shared with the employee shell but a manager only ever arrives there from
-  // the Rules tab (RulesPage's account card), so that is where they still are.
-  { match: '/manager/rules', tab: '/manager/rules' },
-  { match: '/profile', tab: '/manager/rules' },
+  // the Settings tab (SettingsPage's account card), so that is where they
+  // still are.
+  { match: '/manager/settings', tab: '/manager/settings' },
+  { match: '/profile', tab: '/manager/settings' },
   // The inbox is one page for both roles. A manager opens it from the bell in
   // the Overview header, so Overview is the honest answer for them.
   { match: '/notifications', tab: '/manager' },

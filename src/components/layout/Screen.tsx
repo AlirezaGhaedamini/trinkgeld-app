@@ -12,6 +12,16 @@ export interface ScreenAction {
   onClick: () => void;
 }
 
+/** The sticky button at the bottom of a screen, and the note above it. */
+export interface ScreenCta {
+  label: string;
+  onClick: () => void;
+  muted?: boolean;
+  note?: string;
+  noteColor?: string;
+  secondary?: { label: string; onClick: () => void };
+}
+
 interface ScreenProps {
   /** Omit for full-bleed screens such as sign-in and the sent confirmation. */
   title?: string;
@@ -20,15 +30,21 @@ interface ScreenProps {
   titleSize?: number;
   back?: 'arrow' | 'close' | false;
   action?: ScreenAction;
+  /**
+   * Where the back arrow goes when there is no earlier screen of this app to
+   * return to — the screen was opened straight from a link, a bookmark or a new
+   * tab. With app history behind it, back is always the browser's own back, so
+   * the arrow and the browser button never disagree.
+   */
+  backTo?: string;
   /** Primary sticky button at the bottom. */
-  cta?: {
-    label: string;
-    onClick: () => void;
-    muted?: boolean;
-    note?: string;
-    noteColor?: string;
-    secondary?: { label: string; onClick: () => void };
-  };
+  cta?: ScreenCta;
+  /**
+   * A note in the sticky bottom bar with no button under it: a running figure
+   * the screen's own controls change, kept in view while the body scrolls.
+   * Ignored when `cta` is set — a button carries its own note.
+   */
+  footnote?: { text: string; color?: string };
   /**
    * True when a tab bar follows, so the CTA bar drops its safe-area padding
    * and the body drops the room it reserves when nothing follows it.
@@ -51,8 +67,10 @@ export function Screen({
   kicker,
   titleSize = 20,
   back = 'arrow',
+  backTo,
   action,
   cta,
+  footnote,
   aboveTabs,
   center = false,
   children,
@@ -64,6 +82,22 @@ export function Screen({
   const tabsPresent = useTabsPresent();
   const tabsBelow = aboveTabs ?? tabsPresent;
 
+  /* React Router numbers the entries it creates in `history.state.idx`; 0 is
+     the first screen this tab opened. `location.key === 'default'` is the
+     usual test, but it misses a first screen reached through a redirect — an
+     old /manager/rules bookmark lands on idx 0 with a real key — and there
+     navigate(-1) would leave the app. Replacing rather than pushing keeps the
+     browser's own back from bouncing between the two. */
+  const goBack = () => {
+    const entry: unknown = window.history.state;
+    const idx =
+      typeof entry === 'object' && entry !== null && 'idx' in entry && typeof entry.idx === 'number'
+        ? entry.idx
+        : 0;
+    if (backTo && idx === 0) navigate(backTo, { replace: true });
+    else navigate(-1);
+  };
+
   return (
     <>
       {title !== undefined ? (
@@ -72,7 +106,7 @@ export function Screen({
             <button
               type="button"
               className={styles.backButton}
-              onClick={() => navigate(-1)}
+              onClick={goBack}
               aria-label={back === 'close' ? t('close') : t('back')}
             >
               <Icon name={back === 'close' ? 'x' : 'arrow-left'} size={22} />
@@ -98,7 +132,7 @@ export function Screen({
           styles.body,
           'app-scroll',
           center ? styles.bodyCentered : '',
-          !cta && !tabsBelow ? styles.bodyLoose : '',
+          !cta && !footnote && !tabsBelow ? styles.bodyLoose : '',
         ]
           .filter(Boolean)
           .join(' ')}
@@ -123,6 +157,12 @@ export function Screen({
               {cta.label}
             </Button>
           </div>
+        </div>
+      ) : footnote ? (
+        <div className={`${styles.ctaBar} ${tabsBelow ? styles.ctaBarAboveTabs : ''}`}>
+          <p className={styles.ctaNote} style={{ color: footnote.color ?? 'var(--color-text-muted)' }}>
+            {footnote.text}
+          </p>
         </div>
       ) : null}
     </>

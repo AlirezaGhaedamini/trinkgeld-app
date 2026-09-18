@@ -115,7 +115,7 @@ export function WizardAreasPage() {
     return (
       <Screen title={t('areaSplit')} kicker={`${t('step')} 2/4`}>
         <EmptyState title={t('wizNoRuleTitle')}>{t('wizNoRuleBody')}</EmptyState>
-        <Button block onClick={() => navigate('/manager/rules')}>
+        <Button block onClick={() => navigate('/manager/settings')}>
           {t('wizNoRuleCta')}
         </Button>
       </Screen>

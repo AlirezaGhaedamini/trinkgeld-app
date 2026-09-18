@@ -153,7 +153,7 @@ function RealDashboard({ dashboard }: { dashboard: ReturnType<typeof useDashboar
     (rules.status === 'error' || (setup !== null && !(setup.rulesActive && setup.teamAssigned)));
   const setupRows = setup
     ? [
-        { key: 'rules', done: setup.rulesActive, title: t('frRules'), hint: t('frRulesHint'), to: '/manager/rules' },
+        { key: 'rules', done: setup.rulesActive, title: t('frRules'), hint: t('frRulesHint'), to: '/manager/settings' },
         {
           key: 'team',
           done: setup.teamAssigned,
@@ -454,7 +454,7 @@ function RealDashboard({ dashboard }: { dashboard: ReturnType<typeof useDashboar
                 : t('dbNoClose')
             }
             chevron
-            onClick={() => navigate('/manager/rules/period')}
+            onClick={() => navigate('/manager/settings/period')}
           />
         </Card>
       ) : null}

@@ -37,6 +37,33 @@ export const METHOD_LABEL: Record<RuleMethod, StringKey> = {
   equal: 'mEqual',
 };
 
+/** What each method does, in one sentence, printed under its name. */
+export const METHOD_NOTE: Record<RuleMethod, StringKey> = {
+  hours_points: 'mPointsD',
+  hours: 'mHoursD',
+  equal: 'mEqualD',
+};
+
+/**
+ * The overlap models the engine runs, spelled the way a person reads them.
+ *
+ * Partial on purpose: `service_window` has no entry because it is never offered
+ * (see SUPPORTED_BASES). A lookup for it comes back empty, and the caller shows
+ * a dash. It must not borrow another model's name, and it must not hand
+ * `undefined` to t(): that is a type error, and at runtime t() would print an
+ * empty label rather than the dash.
+ */
+export const BASIS_LABEL: Partial<Record<OverlapBasis, StringKey>> = {
+  pairwise: 'basisPairwise',
+  longest_shift: 'basisLongest',
+};
+
+/** What each overlap model does, in one sentence. Partial for the same reason. */
+export const BASIS_NOTE: Partial<Record<OverlapBasis, StringKey>> = {
+  pairwise: 'basisPairwiseD',
+  longest_shift: 'basisLongestD',
+};
+
 /** distribution_rule_areas, joined to the workplace's own area list. */
 export interface AreaShare {
   areaId: string;

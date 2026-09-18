@@ -170,8 +170,13 @@
 /* ── bottom tab bar ─────────────────────────────────────────────────────── */
 .tabBar {
   flex: none;
-  display: flex;
-  justify-content: space-around;
+  /* Five equal columns, each item centred in its own. With space-around the
+     items were as wide as their labels, so a long one ("Einstellungen")
+     widened its tab and pushed the + off centre. Equal columns keep the +
+     in the middle whatever the labels say, and space the icons as before. */
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  justify-items: center;
   align-items: center;
   gap: var(--space-1);
   padding: 8px 6px 28px;

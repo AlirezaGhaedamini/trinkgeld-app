@@ -182,7 +182,7 @@ function RealProfile() {
       </Card>
 
       {/* Employees are told the rules exist and who owns them. A manager owns
-          them, and reaches them from the Rules tab. */}
+          them, and reaches them from the Settings tab. */}
       {manager ? null : (
         <Card tone="faint" padding="padded">
           <div className={styles.lockedBanner} style={{ opacity: 0.75 }}>

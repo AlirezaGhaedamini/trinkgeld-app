@@ -35,7 +35,7 @@ export function BottomNav() {
         { to: '/manager', icon: 'squares-four', label: t('tabOverview') },
         { to: '/manager/distributions', icon: 'list-dashes', label: t('tabHistory') },
         { to: '/manager/team', icon: 'users-three', label: t('tabTeam') },
-        { to: '/manager/rules', icon: 'gear', label: t('tabSettings') },
+        { to: '/manager/settings', icon: 'gear', label: t('tabSettings') },
       ]
     : [
         { to: '/home', icon: 'house', label: t('tabHome') },
@@ -45,9 +45,9 @@ export function BottomNav() {
       ];
 
   /* Which section the person is in, for a pathname that may be several
-     screens deep: a distribution reads as History, a member as Team, a rules
-     subpage as Rules. The table lives in tabs.ts so the offline check can
-     drive the same rule this bar does. */
+     screens deep: a distribution reads as History, a member as Team, a
+     settings subpage as Settings. The table lives in tabs.ts so the offline
+     check can drive the same rule this bar does. */
   const active = activeTabFor(pathname, manager ? 'manager' : 'employee');
   const isActive = (to: string) => active === to;
 

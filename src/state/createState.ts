@@ -78,7 +78,7 @@ export function createEmptyState(): AppState {
       id: 'rule-local',
       workplaceId: EMPTY_WORKPLACE.id,
       // Nobody has decided how to split the pool yet — the manager does that
-      // on the Rules screen before the first distribution.
+      // in Settings before the first distribution.
       areaShares: { ...EMPTY_SHARES },
       // These four are settings with sensible defaults rather than user
       // content, so a fresh install still has a working rule to start from.

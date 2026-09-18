@@ -66,7 +66,7 @@ export function PeriodClosePage() {
 
   if (!period.enabled) {
     return (
-      <Screen title={t('pcTitle')}>
+      <Screen title={t('pcTitle')} backTo="/manager/settings">
         <EmptyState title={t('pcTitle')}>{t('pcIntro')}</EmptyState>
       </Screen>
     );
@@ -138,6 +138,7 @@ export function PeriodClosePage() {
   return (
     <Screen
       title={t('pcTitle')}
+      backTo="/manager/settings"
       cta={
         closed
           ? {

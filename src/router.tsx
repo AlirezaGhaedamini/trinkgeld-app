@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
   HomeRedirect,
@@ -7,6 +7,7 @@ import {
   RequireSession,
   RequireWorkplace,
 } from '@/components/layout/guards';
+import { RuleEditorProvider } from '@/rules/RuleEditorProvider';
 
 import { SignInPage } from '@/pages/auth/SignInPage';
 import { SignUpPage } from '@/pages/auth/SignUpPage';
@@ -36,13 +37,25 @@ import { MemberPage } from '@/pages/manager/MemberPage';
 import { InvitePage } from '@/pages/manager/InvitePage';
 import { DistributionsPage } from '@/pages/manager/DistributionsPage';
 import { DistributionDetailPage } from '@/pages/manager/DistributionDetailPage';
-import { RulesPage } from '@/pages/manager/RulesPage';
+import { SettingsPage } from '@/pages/manager/SettingsPage';
+import { SettingsPoolPage } from '@/pages/manager/SettingsPoolPage';
+import { SettingsWorkingTogetherPage } from '@/pages/manager/SettingsWorkingTogetherPage';
+import { SettingsWithinAreaPage } from '@/pages/manager/SettingsWithinAreaPage';
+import { SettingsMinOverlapPage } from '@/pages/manager/SettingsMinOverlapPage';
+import { SettingsRoundingPage } from '@/pages/manager/SettingsRoundingPage';
+import { SettingsConfirmationPage } from '@/pages/manager/SettingsConfirmationPage';
 import { AreasPage } from '@/pages/manager/AreasPage';
 import { RolesPage } from '@/pages/manager/RolesPage';
 import { WorkplaceSettingsPage } from '@/pages/manager/WorkplaceSettingsPage';
 import { PeriodClosePage } from '@/pages/manager/PeriodClosePage';
 import { StaffReportsPage } from '@/pages/manager/StaffReportsPage';
 import { OverlapPage } from '@/pages/manager/OverlapPage';
+
+/** /manager/rules/<page> → /manager/settings/<page>; the four page names did not change. */
+function LegacyRulesRedirect() {
+  const { page } = useParams();
+  return <Navigate to={`/manager/settings/${page ?? ''}`} replace />;
+}
 
 /**
  * Every screen in the prototype is a real route.
@@ -93,7 +106,7 @@ export function AppRoutes() {
           Tabbed, even though these sit OUTSIDE RequireWorkplace. They are the
           two screens a person reaches without an active workplace — but they
           are also where somebody who already has one comes to switch, and the
-          release test found that path losing the bar: Rules, account card,
+          release test found that path losing the bar: Settings, account card,
           Workplace row. AppLayout withholds the bar when there is no active
           membership, so onboarding still gets a clean screen and a switch does
           not strand a manager.
@@ -139,7 +152,7 @@ export function AppRoutes() {
             The manager area keeps its tab bar. Not only on the four roots: on
             everything pushed from them too — a distribution and its payout,
             correction and question states, the sent confirmation, a team
-            member, every rules subpage, the period close, the hours review,
+            member, every settings subpage, the period close, the hours review,
             the reports. Release testing found the old split trapping people:
             finishing a distribution left them several screens deep with no way
             to another section except unwinding the stack one back-tap at a
@@ -156,7 +169,6 @@ export function AppRoutes() {
               <Route path="/manager" element={<DashboardPage />} />
               <Route path="/manager/distributions" element={<DistributionsPage />} />
               <Route path="/manager/team" element={<TeamPage />} />
-              <Route path="/manager/rules" element={<RulesPage />} />
 
               <Route path="/manager/sent" element={<SentPage />} />
               {/* The real confirmation names the night it is about, so a
@@ -164,10 +176,6 @@ export function AppRoutes() {
               <Route path="/manager/sent/:distributionId" element={<SentPage />} />
               <Route path="/manager/hours" element={<HoursReviewPage mode="review" />} />
               <Route path="/manager/overlap" element={<OverlapPage />} />
-              <Route path="/manager/rules/areas" element={<AreasPage />} />
-              <Route path="/manager/rules/roles" element={<RolesPage />} />
-              <Route path="/manager/rules/workplace" element={<WorkplaceSettingsPage />} />
-              <Route path="/manager/rules/period" element={<PeriodClosePage />} />
               <Route path="/manager/reports" element={<StaffReportsPage />} />
               <Route path="/manager/invite" element={<InvitePage />} />
               <Route path="/manager/team/:employeeId" element={<MemberPage />} />
@@ -175,7 +183,45 @@ export function AppRoutes() {
                 path="/manager/distributions/:distributionId"
                 element={<DistributionDetailPage />}
               />
+
+              {/*
+                Settings — the whole subtree under ONE RuleEditorProvider, a
+                layout route: it stays mounted while the manager moves anywhere
+                inside, so an unactivated rule change survives a trip through
+                any section, Areas, Roles, the workplace settings or the period
+                close. Nothing is written until the draft is activated, and
+                leaving the subtree with changes waiting asks first. The
+                provider's header says why both matter.
+              */}
+              <Route element={<RuleEditorProvider />}>
+                <Route path="/manager/settings" element={<SettingsPage />} />
+                <Route path="/manager/settings/pool" element={<SettingsPoolPage />} />
+                <Route
+                  path="/manager/settings/working-together"
+                  element={<SettingsWorkingTogetherPage />}
+                />
+                <Route path="/manager/settings/within-area" element={<SettingsWithinAreaPage />} />
+                <Route
+                  path="/manager/settings/minimum-shared-time"
+                  element={<SettingsMinOverlapPage />}
+                />
+                <Route path="/manager/settings/rounding" element={<SettingsRoundingPage />} />
+                <Route
+                  path="/manager/settings/confirmation"
+                  element={<SettingsConfirmationPage />}
+                />
+                <Route path="/manager/settings/areas" element={<AreasPage />} />
+                <Route path="/manager/settings/roles" element={<RolesPage />} />
+                <Route path="/manager/settings/workplace" element={<WorkplaceSettingsPage />} />
+                <Route path="/manager/settings/period" element={<PeriodClosePage />} />
+              </Route>
             </Route>
+
+            {/* The tab was "Rules" at /manager/rules until the Settings split.
+                A bookmark, an open tab or a link from before still lands, on
+                the same screen under its new path. */}
+            <Route path="/manager/rules" element={<Navigate to="/manager/settings" replace />} />
+            <Route path="/manager/rules/:page" element={<LegacyRulesRedirect />} />
 
             {/*
               THE EXCEPTION, and the only one: the four steps of the

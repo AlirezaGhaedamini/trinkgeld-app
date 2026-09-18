@@ -63,7 +63,7 @@ export function RolesPage() {
 
   if (!config.enabled) {
     return (
-      <Screen title={t('cfgRolesTitle')} back="arrow">
+      <Screen title={t('cfgRolesTitle')} back="arrow" backTo="/manager/settings">
         <EmptyState title={t('ruleReadOnly')} />
       </Screen>
     );
@@ -158,7 +158,7 @@ export function RolesPage() {
   return (
     <Screen
       title={t('cfgRolesTitle')}
-      back="arrow"
+      back="arrow" backTo="/manager/settings"
       action={{
         label: reordering ? t('cfgReorderDone') : t('cfgReorder'),
         onClick: () => setReordering((value) => !value),

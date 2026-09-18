@@ -65,7 +65,7 @@ export function WorkplaceSettingsPage() {
 
   if (!rules.enabled) {
     return (
-      <Screen title={t('wsTitle')} back="arrow">
+      <Screen title={t('wsTitle')} back="arrow" backTo="/manager/settings">
         <EmptyState title={t('ruleReadOnly')} />
       </Screen>
     );
@@ -73,7 +73,7 @@ export function WorkplaceSettingsPage() {
 
   if (!draft || !saved) {
     return (
-      <Screen title={t('wsTitle')} back="arrow">
+      <Screen title={t('wsTitle')} back="arrow" backTo="/manager/settings">
         <EmptyState title={t('dLoading')} />
       </Screen>
     );
@@ -101,7 +101,7 @@ export function WorkplaceSettingsPage() {
   return (
     <Screen
       title={t('wsTitle')}
-      back="arrow"
+      back="arrow" backTo="/manager/settings"
       cta={{ label: t('save'), muted: rules.busy || !dirty, onClick: () => void save() }}
     >
       <Lede>{t('wsPeerNote')}</Lede>

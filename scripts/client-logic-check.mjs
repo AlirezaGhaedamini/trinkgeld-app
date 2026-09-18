@@ -58,6 +58,7 @@ const notifications = await import(pathToFileURL(resolve(ROOT, 'src/notification
 const ack = await import(pathToFileURL(resolve(ROOT, 'src/distribution/ack.ts')).href);
 const strings = await import(pathToFileURL(resolve(ROOT, 'src/i18n/strings.ts')).href);
 const tabs = await import(pathToFileURL(resolve(ROOT, 'src/components/layout/tabs.ts')).href);
+const settingsPaths = await import(pathToFileURL(resolve(ROOT, 'src/rules/settingsPaths.ts')).href);
 const moneyLib = await import(pathToFileURL(resolve(ROOT, 'src/lib/money.ts')).href);
 const csvLib = await import(pathToFileURL(resolve(ROOT, 'src/period/csv.ts')).href);
 
@@ -248,9 +249,9 @@ check('44. the four manager roots light their own tab',
   mgr('/manager') === '/manager' &&
     mgr('/manager/distributions') === '/manager/distributions' &&
     mgr('/manager/team') === '/manager/team' &&
-    mgr('/manager/rules') === '/manager/rules')
+    mgr('/manager/settings') === '/manager/settings')
 check('45. Overview does not swallow every path beneath it',
-  mgr('/manager/team') !== '/manager' && mgr('/manager/rules/period') !== '/manager')
+  mgr('/manager/team') !== '/manager' && mgr('/manager/settings/period') !== '/manager')
 check('46. a distribution, however deep, reads as History',
   mgr('/manager/distributions/abc-123') === '/manager/distributions')
 check('47. …and so does the sent confirmation, which shares no prefix with it',
@@ -258,9 +259,10 @@ check('47. …and so does the sent confirmation, which shares no prefix with it'
     mgr('/manager/sent/abc-123') === '/manager/distributions')
 check('48. a team member reads as Team, and so does the invitation screen',
   mgr('/manager/team/abc-123') === '/manager/team' && mgr('/manager/invite') === '/manager/team')
-check('49. every rules subpage reads as Rules, longest prefix winning over /manager',
-  ['areas', 'roles', 'workplace', 'period'].every(
-    (p) => mgr(`/manager/rules/${p}`) === '/manager/rules'))
+check('49. every settings subpage reads as Settings, longest prefix winning over /manager',
+  ['pool', 'working-together', 'within-area', 'minimum-shared-time', 'rounding',
+    'confirmation', 'areas', 'roles', 'workplace', 'period'].every(
+    (p) => mgr(`/manager/settings/${p}`) === '/manager/settings'))
 check('50. the screens the dashboard launches read as Overview',
   mgr('/manager/hours') === '/manager' && mgr('/manager/reports') === '/manager' &&
     mgr('/manager/overlap') === '/manager')
@@ -268,7 +270,7 @@ check('51. the wizard claims no tab at all — it shows no bar, so nothing may l
   ['/manager/new', '/manager/new/pool', '/manager/new/areas', '/manager/new/hours',
     '/manager/new/result'].every((p) => mgr(p) === null))
 check('52. a path that merely starts with a tab\'s letters is not that tab',
-  mgr('/manager/teams') === null && mgr('/manager/rulesets') === null &&
+  mgr('/manager/teams') === null && mgr('/manager/settingsx') === null &&
     mgr('/managerial') === null)
 check('53. a route outside the tabbed area answers null rather than guessing',
   mgr('/signin') === null && mgr('/') === null && mgr('/join') === null &&
@@ -286,8 +288,8 @@ check('58. the language screen stays under You',
   emp('/profile/language') === '/profile')
 check('59. the shared inbox keeps each role in its own section',
   emp('/notifications') === '/home' && mgr('/notifications') === '/manager')
-check('60. the account screen reads as Rules for a manager, who reaches it from there',
-  mgr('/profile') === '/manager/rules' && mgr('/profile/language') === '/manager/rules')
+check('60. the account screen reads as Settings for a manager, who reaches it from there',
+  mgr('/profile') === '/manager/settings' && mgr('/profile/language') === '/manager/settings')
 check('61. the two roles never read each other\'s routes',
   emp('/manager/team') === null && emp('/manager') === null &&
     mgr('/home') === null && mgr('/history') === null)
@@ -296,9 +298,10 @@ check('62. every route the app can show a bar on resolves to a tab, for its own 
     ['/profile', 'employee'], ['/profile/language', 'employee'], ['/payout/x', 'employee'],
     ['/report', 'employee'], ['/notifications', 'employee'],
     ['/manager', 'manager'], ['/manager/distributions', 'manager'], ['/manager/team', 'manager'],
-    ['/manager/rules', 'manager'], ['/manager/sent/x', 'manager'],
+    ['/manager/settings', 'manager'], ['/manager/sent/x', 'manager'],
     ['/manager/distributions/x', 'manager'], ['/manager/team/x', 'manager'],
-    ['/manager/rules/period', 'manager'], ['/manager/hours', 'manager'],
+    ['/manager/settings/period', 'manager'], ['/manager/settings/pool', 'manager'],
+    ['/manager/hours', 'manager'],
     ['/manager/reports', 'manager'], ['/manager/overlap', 'manager'],
     ['/manager/invite', 'manager'], ['/manager/sent', 'manager'],
     ['/notifications', 'manager'], ['/profile', 'manager'],
@@ -620,6 +623,27 @@ const missing = await teamQueries.fetchTeam(
   membership)
 check('113. …and so does a frontend that reached production before migration 40',
   missing.members.length === 2 && missing.members.every((m) => m.email === null))
+
+/* Settings: the subtree the rule editor lives in, and the edge the "Discard
+   changes?" warning guards. The same function the app calls. */
+const { insideSettings, savesElsewhere } = settingsPaths
+check('114. every Settings screen is inside Settings, so moving between them keeps the pending edits',
+  ['/manager/settings', '/manager/settings/pool', '/manager/settings/working-together',
+    '/manager/settings/within-area', '/manager/settings/minimum-shared-time',
+    '/manager/settings/rounding', '/manager/settings/confirmation', '/manager/settings/areas',
+    '/manager/settings/roles', '/manager/settings/workplace', '/manager/settings/period',
+  ].every(insideSettings))
+check('115. the old /manager/rules links only redirect into Settings, so they are not leaving',
+  insideSettings('/manager/rules') && insideSettings('/manager/rules/period'))
+check('116. every other tab, the + workflow and the account screen are outside, so they warn',
+  ['/manager', '/manager/distributions', '/manager/team', '/manager/team/x', '/manager/new/pool',
+    '/manager/invite', '/profile', '/home', '/'].every((p) => !insideSettings(p)))
+check('117. a path that merely starts with the letters is not Settings',
+  !insideSettings('/manager/settingsx') && !insideSettings('/manager/rulesets'))
+check('118. the rules are read again after areas, roles and the workplace settings — and only those',
+  savesElsewhere('/manager/settings/areas') && savesElsewhere('/manager/settings/roles') &&
+    savesElsewhere('/manager/settings/workplace') && !savesElsewhere('/manager/settings/period') &&
+    !savesElsewhere('/manager/settings/pool') && !savesElsewhere('/manager/settings'))
 
 /* ── summary ─────────────────────────────────────────────────────────────── */
 console.log(`\n  ${pass} passed, ${fail} failed`);
