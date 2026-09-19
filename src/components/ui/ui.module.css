@@ -736,7 +736,9 @@
   position: absolute;
   left: var(--screen-gutter);
   right: var(--screen-gutter);
-  bottom: 110px;
+  /* Clear of the tab bar, which grows by the home-indicator inset — so the
+     toast has to rise by the same amount or it lands on the tabs. */
+  bottom: calc(110px + var(--safe-bottom));
   z-index: 60;
   background: var(--color-card);
   box-shadow: var(--shadow-toast);
@@ -834,7 +836,10 @@
   flex-direction: column;
   justify-content: center;
   gap: var(--space-5);
-  padding: 40px 20px calc(40px + env(safe-area-inset-bottom));
+  /* Its own page, so it applies the device insets itself — through the same
+     tokens as the shell, not a second reading of env(). */
+  padding: calc(40px + var(--safe-top)) calc(20px + var(--safe-right))
+    calc(40px + var(--safe-bottom)) calc(20px + var(--safe-left));
   background: var(--color-bg);
   text-align: center;
 }

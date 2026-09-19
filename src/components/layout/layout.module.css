@@ -32,6 +32,11 @@
 }
 
 /* ── the app screen ─────────────────────────────────────────────────────── */
+/* The one place the top safe-area inset is applied. Every header, body and
+   bar lays out inside this box, so each starts below the status bar / notch /
+   Dynamic Island and keeps its own designed spacing on top of the inset. The
+   box's background runs up under the status bar, so the inset reads as part
+   of the app rather than a stripe of page colour. (ShellFrame draws it.) */
 .screen {
   position: relative;
   flex: 1;
@@ -44,21 +49,33 @@
 }
 
 /* ── header ─────────────────────────────────────────────────────────────── */
+/* Its own 12px of breathing room above the text, on top of whatever the
+   device's safe area takes (.screen): 12px in a browser, 12px under the status
+   bar, notch or Dynamic Island in the app. */
 .header {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-6);
-  min-height: 48px;
-  padding: 6px var(--screen-gutter) var(--space-5);
+  /* Exactly the smallest header there is — the default 20px title's 24px line
+     between the two paddings. Taller than that, it would centre that title a
+     pixel below the 12px every other header starts at; as a floor, it keeps
+     the 44px back arrow clear of the safe area whatever the title. */
+  min-height: calc(var(--space-6) + 24px + var(--space-5));
+  padding: var(--space-6) var(--screen-gutter) var(--space-5);
   padding-left: calc(var(--screen-gutter) + var(--safe-left));
   padding-right: calc(var(--screen-gutter) + var(--safe-right));
 }
 
+/* Like the header action below: the 44px target (exactly the tap minimum) is
+   centred on the title but takes no height of its own in the row, so the
+   title block decides where the header starts — safe area + 12px on every
+   screen, pushed or not — and the target reaches into the header's padding. */
 .backButton {
   width: 44px;
   height: 44px;
   margin-left: -10px;
+  margin-block: calc(var(--tap-min) / -2);
   border-radius: 22px;
   display: flex;
   align-items: center;
@@ -89,9 +106,16 @@
   overflow-wrap: anywhere;
 }
 
+/* The 44px tap target is centred on the title, as before, but no longer sets
+   the height of the row: a 44px box beside a 31px title made the row 44px
+   and pushed the title 6px below where every other header starts it (Team,
+   with its Invite action). With its vertical margins it takes no height of its
+   own, so the title decides the row, and the target reaches into the header's
+   padding instead — full size, still clear of the safe area. */
 .headerAction {
   min-width: var(--tap-min);
   min-height: var(--tap-min);
+  margin-block: calc(var(--tap-min) / -2);
   display: flex;
   align-items: center;
   justify-content: center;

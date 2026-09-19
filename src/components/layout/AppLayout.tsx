@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { TabsPresentContext } from '@/components/layout/tabsContext';
 import { DemoBar } from '@/components/layout/DemoBar';
+import { ShellFrame } from '@/components/layout/ShellFrame';
 import { Toast } from '@/components/ui/Toast';
 import { useRealAuth } from '@/hooks/useAuth';
 import { useWorkplace } from '@/hooks/useWorkplace';
@@ -50,23 +51,22 @@ export function AppLayout({ withTabs = false }: AppLayoutProps) {
 
   return (
     <TabsPresentContext.Provider value={showTabs}>
-      <div className={styles.page}>
-        {real ? null : <DemoBar />}
-        <div className={styles.screenHost}>
-          <div className={styles.screen}>
-            <Outlet />
-            {showTabs ? <BottomNav /> : null}
-            {message ? <Toast message={message} /> : null}
-          </div>
-        </div>
-        {real ? null : (
-          <p className={styles.footerHint}>
-            {language === 'Deutsch'
-              ? 'Alles ist anklickbar: Tabs, Karten, Listenzeilen, Zurück. Der Rechner rechnet mit den Zahlen, die du eingibst.'
-              : 'Everything is clickable: tabs, cards, list rows, back. The calculator uses the numbers you actually enter.'}
-          </p>
-        )}
-      </div>
+      <ShellFrame
+        above={real ? null : <DemoBar />}
+        below={
+          real ? null : (
+            <p className={styles.footerHint}>
+              {language === 'Deutsch'
+                ? 'Alles ist anklickbar: Tabs, Karten, Listenzeilen, Zurück. Der Rechner rechnet mit den Zahlen, die du eingibst.'
+                : 'Everything is clickable: tabs, cards, list rows, back. The calculator uses the numbers you actually enter.'}
+            </p>
+          )
+        }
+      >
+        <Outlet />
+        {showTabs ? <BottomNav /> : null}
+        {message ? <Toast message={message} /> : null}
+      </ShellFrame>
     </TabsPresentContext.Provider>
   );
 }
