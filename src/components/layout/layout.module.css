@@ -194,17 +194,25 @@
 /* ── bottom tab bar ─────────────────────────────────────────────────────── */
 .tabBar {
   flex: none;
-  /* Five equal columns, each item centred in its own. With space-around the
-     items were as wide as their labels, so a long one ("Einstellungen")
-     widened its tab and pushed the + off centre. Equal columns keep the +
-     in the middle whatever the labels say, and space the icons as before. */
+  /* ONE EQUAL COLUMN PER ITEM, however many there are: four for an employee,
+     five for a manager, whose raised + is then the middle column and exactly
+     centred. Each item is centred in its own column, so the first and last sit
+     the same distance from the edges and no label's width can move anything.
+     (A fixed repeat(5, …) left an employee's four items in the first four
+     columns with the fifth standing empty on the right.) */
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   justify-items: center;
   align-items: center;
   gap: var(--space-1);
-  padding: 8px 6px 28px;
-  padding-bottom: calc(28px + var(--safe-bottom));
+  /* Under the labels: the bar's own spacing, or the room the home indicator
+     needs where there is one — whichever is larger, never the two added up.
+     The design's 28px WAS the indicator's room in the prototype's device
+     mock, so adding a real 34px inset to it left the bar half as tall again
+     as it needs to be, with an empty strip under the labels. */
+  padding: 8px 6px;
+  padding-bottom: max(var(--space-6), var(--safe-bottom));
   background: var(--color-bg);
   box-shadow: var(--shadow-bar);
 }
@@ -215,6 +223,9 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
+  /* The whole column answers the tap, not just the icon and label in the
+     middle of it. The raised + keeps its own 52px circle (.tabAction). */
+  width: 100%;
   min-width: 52px;
   min-height: var(--tap-min);
   padding: 0 2px;
@@ -228,10 +239,12 @@
   color: var(--color-accent);
 }
 
+/* One line, at its natural width. The tab box is now the whole column, and
+   constraining the label to it would cut "Einstellungen" short at 320px —
+   the tab used to size itself to the label instead. Centred in its column, a
+   label a little wider than its own box reaches into the 2px gap, which
+   nothing else occupies. */
 .tabLabel {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
