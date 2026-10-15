@@ -645,6 +645,87 @@ check('118. the rules are read again after areas, roles and the workplace settin
     savesElsewhere('/manager/settings/workplace') && !savesElsewhere('/manager/settings/period') &&
     !savesElsewhere('/manager/settings/pool') && !savesElsewhere('/manager/settings'))
 
+/* ── the invitation link: through sign-up, sign-in, a refresh and the
+      email-confirmation round trip ─────────────────────────────────────────── */
+const invitationLink = await import(pathToFileURL(resolve(ROOT, 'src/workplace/invitationLink.ts')).href);
+const { invitationTokenFrom, joinPathFor, signUpPathFor, signInPathFor, isInvitationVisit } = invitationLink;
+const TOKEN = 'a'.repeat(64);
+const query = (path) => path.slice(path.indexOf('?'));
+check('119. the token is read from the link, with or without the leading question mark',
+  invitationTokenFrom(`?token=${TOKEN}`) === TOKEN && invitationTokenFrom(`token=${TOKEN}`) === TOKEN &&
+    invitationTokenFrom(`?x=1&token=${TOKEN}`) === TOKEN)
+check('120. junk, an empty value and a missing parameter carry nothing',
+  invitationTokenFrom('?token=') === null && invitationTokenFrom('?token=%3Cscript%3E') === null &&
+    invitationTokenFrom('?token=a b') === null && invitationTokenFrom('?other=1') === null &&
+    invitationTokenFrom('') === null && invitationTokenFrom(null) === null)
+check('121. the join, sign-up and sign-in paths all carry the same token, so a refresh on any of them keeps it',
+  invitationTokenFrom(query(joinPathFor(TOKEN))) === TOKEN &&
+    invitationTokenFrom(query(signUpPathFor(TOKEN))) === TOKEN &&
+    invitationTokenFrom(query(signInPathFor(TOKEN))) === TOKEN &&
+    joinPathFor(TOKEN).startsWith('/join?') && signUpPathFor(TOKEN).startsWith('/signup?') &&
+    signInPathFor(TOKEN).startsWith('/signin?'))
+check('122. only /join with a token is an invitation visit',
+  isInvitationVisit('/join', `?token=${TOKEN}`) && !isInvitationVisit('/join', '') &&
+    !isInvitationVisit('/home', `?token=${TOKEN}`) && !isInvitationVisit('/join', '?token=nope'))
+
+/* The confirmation email reopens the app at its root with no router state.
+   The stored return path must still name the invitation, and only for the
+   account that signed up on it. A minimal localStorage stands in for the
+   browser; returnTo.ts touches nothing else of the DOM. */
+const store = new Map();
+globalThis.window = {
+  localStorage: {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { store.set(k, String(v)); },
+    removeItem: (k) => { store.delete(k); },
+  },
+};
+const returnTo = await import(pathToFileURL(resolve(ROOT, 'src/auth/returnTo.ts')).href);
+const { safeReturnTo, rememberReturnTo, peekReturnTo, takeReturnTo, clearReturnTo } = returnTo;
+check('123. the invitation path is worth returning to; the bare onboarding and auth screens are not',
+  safeReturnTo(joinPathFor(TOKEN)) === joinPathFor(TOKEN) && safeReturnTo('/join') === null &&
+    safeReturnTo(signUpPathFor(TOKEN)) === null && safeReturnTo(signInPathFor(TOKEN)) === null)
+rememberReturnTo(joinPathFor(TOKEN), 'Masoud@Example.com ')
+check('124. after the email-confirmation round trip the invitation is still known — for that account',
+  peekReturnTo('masoud@example.com') === joinPathFor(TOKEN))
+check('125. …and not for anybody else who signs in on the same device',
+  peekReturnTo('other@example.com') === null && peekReturnTo('') === null && peekReturnTo(null) === null)
+check('126. it is honoured once, then gone',
+  takeReturnTo('masoud@example.com') === joinPathFor(TOKEN) && peekReturnTo('masoud@example.com') === null)
+rememberReturnTo(joinPathFor(TOKEN), 'masoud@example.com')
+check('127. a different account reading the slot clears it for everybody',
+  takeReturnTo('other@example.com') === null && peekReturnTo('masoud@example.com') === null)
+clearReturnTo()
+delete globalThis.window
+
+/* ── the invitation refused to the wrong account, and a closed link ───────── */
+const wpErrors = await import(pathToFileURL(resolve(ROOT, 'src/workplace/errors.ts')).href);
+const { classifyWorkplaceError, invitationFailureFor, WORKPLACE_FAILURE_KEY } = wpErrors;
+check('128. the server refusing another account\'s invitation reads as the wrong account, not as a bad link',
+  classifyWorkplaceError({ code: '42501', message: 'this invitation was sent to a different address' }, 'invite') ===
+    'inviteWrongAccount' && WORKPLACE_FAILURE_KEY.inviteWrongAccount === 'wpInviteWrongAccount')
+check('129. used, withdrawn, expired and unknown links keep their own words',
+  classifyWorkplaceError({ code: '42501', message: 'this invitation has already been used or withdrawn' }, 'invite') === 'inviteUsed' &&
+    classifyWorkplaceError({ code: '42501', message: 'this invitation has expired' }, 'invite') === 'inviteExpired' &&
+    classifyWorkplaceError({ code: '42501', message: 'invitation not found' }, 'invite') === 'invalidInvite')
+check('130. a previewed invitation is open only while pending; every other status closes it',
+  invitationFailureFor('pending') === null && invitationFailureFor('expired') === 'inviteExpired' &&
+    invitationFailureFor('accepted') === 'inviteUsed' && invitationFailureFor('revoked') === 'inviteUsed' &&
+    invitationFailureFor('declined') === 'inviteUsed')
+const { toInvitationPreview } = await import(pathToFileURL(resolve(ROOT, 'src/workplace/types.ts')).href);
+const stale = toInvitationPreview({ workplace_name: null, invited_name: null, email: null, area_name: null,
+  role_name: null, proposed_role: null, status: 'accepted', expires_at: null });
+const unknownStatus = toInvitationPreview({ workplace_name: 'X', invited_name: 'Y', email: 'y@x', area_name: null,
+  role_name: null, proposed_role: 'employee', status: 'something-new', expires_at: '2030-01-01T00:00:00Z' });
+check('132. a stale preview maps to a closed invitation with no details; an unknown status is closed, never open',
+  stale.status === 'accepted' && invitationFailureFor(stale.status) === 'inviteUsed' &&
+    stale.workplaceName === null && stale.invitedName === null && stale.email === null &&
+    stale.proposedRole === null && stale.expiresAt === null &&
+    invitationFailureFor(unknownStatus.status) !== null)
+check('131. sign-up → sign-in → sign-up keeps the same token in each URL',
+  invitationTokenFrom(query(signUpPathFor(invitationTokenFrom(query(signInPathFor(
+    invitationTokenFrom(query(signUpPathFor(TOKEN))))))))) === TOKEN)
+
 /* ── summary ─────────────────────────────────────────────────────────────── */
 console.log(`\n  ${pass} passed, ${fail} failed`);
 if (fail > 0) {

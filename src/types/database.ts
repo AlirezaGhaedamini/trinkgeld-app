@@ -1793,6 +1793,21 @@ export type Database = {
     }
     Functions: {
       accept_invitation: { Args: { p_token: string }; Returns: string }
+      invitation_preview: {
+        Args: { p_token: string }
+        Returns: {
+          // Every column but status is null unless the invitation is still
+          // open (pending, unexpired) — migration 41 names nobody on a dead link.
+          workplace_name: string | null
+          invited_name: string | null
+          email: string | null
+          area_name: string | null
+          role_name: string | null
+          proposed_role: Database["public"]["Enums"]["member_role"] | null
+          status: string
+          expires_at: string | null
+        }[]
+      }
       acknowledge_distribution: {
         Args: {
           p_distribution_id: string

@@ -5,13 +5,18 @@ import { SignOutButton } from '@/auth/SignOutButton';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Icon } from '@/components/ui/Icon';
+import { InvitationCard } from '@/components/domain/InvitationCard';
 import { InfoNote, Lede } from '@/components/ui/Note';
+import { clearReturnTo, normalizeEmail } from '@/auth/returnTo';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
+import { useAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
 import { useToast } from '@/hooks/useToast';
 import { useWorkplace } from '@/hooks/useWorkplace';
-import { WORKPLACE_FAILURE_KEY } from '@/workplace/errors';
+import { WORKPLACE_FAILURE_KEY, invitationFailureFor } from '@/workplace/errors';
+import { invitationTokenFrom, signInPathFor } from '@/workplace/invitationLink';
 import { clearPendingJoin, readPendingJoin, writePendingJoin } from '@/workplace/pendingJoin';
+import { useInvitationPreview } from '@/workplace/useInvitationPreview';
 import { initialsOf } from '@/data/employees';
 import ui from '@/components/ui/ui.module.css';
 import styles from '@/pages/pages.module.css';
@@ -29,7 +34,9 @@ const CODE_LENGTH = 6;
  *       in a loud room must not be enough to get into a workplace.
  *   an invite token in the URL (#/join?token=…) → accept_invitation(). The role
  *       is whatever the manager put on the invitation; there is no argument for
- *       it and the browser cannot influence it.
+ *       it and the browser cannot influence it. The screen then shows the
+ *       invitation instead of the code field (InvitationJoin below) and waits
+ *       for the person to accept it — never silently on arrival.
  *   "set up a new workplace" → create_workplace(), which creates the workplace,
  *       seeds its areas and roles and writes the manager membership in one
  *       transaction. A workplace with no manager cannot exist.
@@ -56,7 +63,6 @@ export function JoinWorkplacePage() {
 
   const [newName, setNewName] = useState('');
   const [requested, setRequested] = useState(false);
-  const acceptedToken = useRef<string | null>(null);
 
   const fail = (key: keyof typeof WORKPLACE_FAILURE_KEY) => show(t(WORKPLACE_FAILURE_KEY[key]));
 
@@ -78,30 +84,6 @@ export function JoinWorkplacePage() {
     dispatch({ type: 'setJoinCode', code: pending.code });
     setRequested(true);
   }, [real, workplace.memberships.length, dispatch]);
-
-  /**
-   * An invitation link lands here as `#/join?token=…`. The token is 64 hex
-   * characters, so it can never be typed into the six-cell code field — which
-   * is exactly why it arrives by URL instead.
-   */
-  useEffect(() => {
-    if (!real || workplace.busy) return;
-    // Read the token from the router's location, not window.location: arriving
-    // at #/join?token=… from inside the app changes the search without
-    // remounting this component.
-    const token = new URLSearchParams(location.search).get('token');
-    if (!token || acceptedToken.current === token) return;
-    acceptedToken.current = token;
-
-    void workplace.acceptInvitation(token).then((result) => {
-      if (!result.ok) {
-        show(t(WORKPLACE_FAILURE_KEY[result.failure ?? 'invalidInvite']));
-        return;
-      }
-      show(t('wpWelcome'));
-      navigate('/', { replace: true });
-    });
-  }, [real, workplace, location.search, show, t, navigate]);
 
   const submitCode = async () => {
     if (!real) {
@@ -140,6 +122,13 @@ export function JoinWorkplacePage() {
   };
 
   const createReady = !real || newName.trim().length > 0;
+
+  /* An invitation link is its own screen: what the manager entered, and one
+     button. The code field and the set-up card belong to people who arrived
+     without one. The token is read from the router's location, so a link
+     opened from inside the app is seen without a remount. */
+  const token = real ? invitationTokenFrom(location.search) : null;
+  if (token) return <InvitationJoin token={token} />;
 
   return (
     <Screen
@@ -297,6 +286,127 @@ export function JoinWorkplacePage() {
           and no route to the profile screen that normally carries this. It
           is also the screen an invitation opens on the wrong account. */}
       <SignOutButton />
+    </Screen>
+  );
+}
+
+/**
+ * The invitation, before it is accepted.
+ *
+ * The same card the sign-up screen showed, so the person recognises what they
+ * are about to join, then one button. Acceptance is never automatic: an
+ * existing account deserves to see which workplace is adding it, and a link
+ * that arrives on the wrong account must not be consumed by it.
+ *
+ * The address check here is the courtesy; accept_invitation() (migration 41)
+ * is the rule and refuses any account but the invited one. The screen only
+ * says so before the person presses anything, and offers the way out: sign
+ * out, then sign in again with the token still in the URL.
+ *
+ * A link that can no longer be used says why, from the server's own status,
+ * and offers the ordinary join screen instead.
+ */
+function InvitationJoin({ token }: { token: string }) {
+  const { t } = useI18n();
+  const { show } = useToast();
+  const navigate = useNavigate();
+  const auth = useAuth();
+  const workplace = useWorkplace();
+  const lookup = useInvitationPreview(token, true);
+
+  const preview = lookup.status === 'ready' ? lookup.preview : null;
+  const closed = preview ? invitationFailureFor(preview.status) : null;
+  const signedInAs = normalizeEmail(auth.email);
+  const wrongAccount =
+    preview !== null && !closed && normalizeEmail(preview.email) !== signedInAs;
+  const canAccept = preview !== null && !closed && !wrongAccount;
+
+  /* A link the server calls closed or unknown has no future on this device:
+     drop the stored confirmation return now rather than at the next start. */
+  const dead = lookup.status === 'missing' || closed !== null;
+  useEffect(() => {
+    if (dead) clearReturnTo();
+  }, [dead]);
+
+  const accept = async () => {
+    if (!canAccept || workplace.busy) return;
+    const result = await workplace.acceptInvitation(token);
+    if (!result.ok) {
+      show(t(WORKPLACE_FAILURE_KEY[result.failure ?? 'invalidInvite']));
+      // Whatever changed under us — used, withdrawn, expired — the card
+      // should now say it, rather than keep offering the button.
+      lookup.reload();
+      return;
+    }
+    // Accepted: the token has done its job. Forget the stored return path at
+    // once, and REPLACE the token-bearing entry with the app itself.
+    clearReturnTo();
+    show(t('wpWelcome'));
+    navigate('/', { replace: true });
+  };
+
+  const problem =
+    lookup.status === 'missing'
+      ? t('wpInvalidInvite')
+      : lookup.status === 'error'
+        ? t('authNetwork')
+        : closed
+          ? t(WORKPLACE_FAILURE_KEY[closed])
+          : null;
+
+  return (
+    <Screen
+      title={t('yourWorkplace')}
+      titleSize={26}
+      back={false}
+      cta={
+        canAccept
+          ? {
+              label: workplace.busy ? t('wpWorking') : t('inviteAccept'),
+              muted: workplace.busy,
+              onClick: () => {
+                void accept();
+              },
+            }
+          : undefined
+      }
+    >
+      {lookup.status === 'loading' || lookup.status === 'idle' ? (
+        <InfoNote icon="hourglass-medium">{t('inviteLoading')}</InfoNote>
+      ) : null}
+
+      {preview && !closed ? (
+        <>
+          <Lede>{t('inviteLede')}</Lede>
+          <InvitationCard preview={preview} />
+        </>
+      ) : null}
+
+      {wrongAccount && preview ? (
+        <InfoNote icon="warning-circle">
+          {t('inviteWrongAccount')
+            .replace('{email}', preview.email ?? '')
+            .replace('{current}', auth.email || '—')}
+        </InfoNote>
+      ) : null}
+
+      {problem ? <InfoNote icon="warning-circle">{problem}</InfoNote> : null}
+
+      {lookup.status === 'error' ? (
+        <Button variant="secondary" quiet block onClick={lookup.reload}>
+          {t('retry')}
+        </Button>
+      ) : null}
+
+      {problem && lookup.status !== 'error' ? (
+        <Button variant="secondary" quiet block onClick={() => navigate('/join', { replace: true })}>
+          {t('inviteUseCode')}
+        </Button>
+      ) : null}
+
+      {/* The wrong account leaves towards a sign-in that still holds the
+          token; anyone else leaves the ordinary way. */}
+      <SignOutButton to={wrongAccount ? signInPathFor(token) : '/signin'} />
     </Screen>
   );
 }

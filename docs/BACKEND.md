@@ -1314,6 +1314,113 @@ stale or foreign id lands on "not available".
 
 ---
 
+## 4o. Invitation-aware onboarding (migration 41)
+
+Two changes, one subject: the invitee can read the invitation before having
+an account (`invitation_preview()`), and only the invitee can accept it
+(`accept_invitation()` gains an address check).
+
+### What the manager's invitation already stores
+
+`create_invitation()` (migration 07) persists all four facts the invitee is
+later shown: the **name** on the roster row it creates
+(`workplace_members.display_name`, status `invited`, pointed to by
+`invitations.member_id`), the **address** on `invitations.email`, the **area**
+on both `invitations.proposed_area_id` and the roster row, and the **role** as
+`invitations.proposed_role` plus the roster row's `workplace_role_id`. Nothing
+new is stored for this feature.
+
+### Why a migration was needed anyway
+
+Nothing could *read* those facts before sign-up. `invitations`, `workplaces`,
+`workplace_members`, `workplace_areas` and `workplace_roles` grant nothing to
+`anon`, and the invitations read policy admits only a manager or an address
+match on a profile. The person opening the link has neither.
+
+### `invitation_preview(p_token)`
+
+A `SECURITY DEFINER`, `STABLE` read function with an empty `search_path` and
+schema-qualified casts, on the pattern of `team_member_emails()` (§4n's
+sibling, migration 40):
+
+- keyed by the token's SHA-256, exactly like `accept_invitation()`. Holding
+  the token is the credential, and it already grants the stronger act of
+  accepting, so reading what the email that carried it already said widens
+  nothing;
+- returns `workplace_name, invited_name, email, area_name, role_name,
+  proposed_role, status, expires_at` and nothing else — no id, no hash, no
+  inviter, no join code;
+- an unknown, empty or null token returns **no row** and no error;
+- `status` is truthful: `expired` is **computed** from `expires_at`, the row
+  is not written. Flipping it stays `accept_invitation()`'s job;
+- **only an open invitation carries details.** Pending and unexpired: all of
+  the columns above. Accepted, revoked, declined or expired: `status` and
+  **null in every other column** — the link outlives its invitation in
+  browser history and must stop naming the person, address and workplace.
+  The screens show only the reason for a closed link;
+- `EXECUTE` is granted to `anon` **on purpose**, the only such function in the
+  schema, because the invitee has no account yet.
+
+### The two name rules, and why they need no backend
+
+- A **brand-new account** gets its initial `profiles.full_name` from the
+  sign-up metadata `app.handle_new_user()` (migrations 02 and 39) already
+  reads. The invitation-aware sign-up screen fills that metadata from the
+  preview; the person may still edit it, because the global name is theirs
+  (migration 39 leaves `full_name` editable).
+- An **existing account** keeps its name. No invitation path writes
+  `full_name`: `accept_invitation()` sets `last_workplace_id` and nothing else
+  on the profile, `profiles_update_own` admits only the owner's row, and the
+  manager's spelling lives on the **roster row** of that one workplace. A
+  manager of workplace A therefore cannot alter anybody's identity by inviting
+  them — suite 27 (H1–H4) proves it for the inviting manager and for a manager
+  of another workplace.
+
+### The address: only the invitee may accept
+
+Before migration 41, `accept_invitation()` bound a seat to whoever held the
+token (migration 40's header says so), and no client checked the address
+either. A forwarded link, or the invitee signing up under another address,
+consumed the invitation for an account the manager never named.
+
+Migration 41 redefines `accept_invitation()` — Migration 07's function, which
+no later migration redefines — with one check added. The caller's **account**
+address is read from `auth.users` via `auth.uid()`; the invitation's from
+`invitations.email`. Both are trimmed with `app.trimmed_note()` (migration 25,
+the one definition of blank). If **either** is missing or blank the caller is
+refused — two absent addresses must never compare equal, and a manager may
+edit an invitation row. Otherwise they must be equal ignoring **case only**:
+`person+work@x` is not `person@x`. The row must also be an invite with an
+address. The refusal is `42501` "this invitation was sent to a different
+address". `profiles.email` plays no part, because migration 39 lets a profile
+exist without one. The check runs after the status and expiry checks (a used
+or expired link says what it always said) and before any write (a refused
+caller changes nothing — suite 27 C3/C4 and E1–E6, with negative controls NC3
+and NC4).
+
+### Privileges
+
+Supabase's default privileges grant EXECUTE on new `public` functions to
+`anon`, `authenticated` and `service_role` by name, and `revoke … from public`
+does not remove those. Migration 41 therefore revokes and grants by name:
+
+| Function | anon | authenticated | service_role | PUBLIC |
+| --- | --- | --- | --- | --- |
+| `accept_invitation(text)` | no | yes | no | no |
+| `invitation_preview(text)` | **yes, on purpose** | yes | no | no |
+
+Suite 27 S4–S7 reproduce the platform default and prove the shipped file ends
+with exactly this ACL; NC5 shows the by-name revoke is what achieves it.
+
+The client mirrors it as a courtesy: the invitation sign-up uses the invited
+address and offers no address field, and the join screen shows the
+invitation, says so when the signed-in account is not the invited one, and
+offers sign-out towards a sign-in that still carries the token. Acceptance is
+an explicit button, never automatic on arrival.
+
+Suite: `supabase/tests/27_invitation_preview.sql`. Migrations 1–40 are
+untouched.
+
 ## 5. Security model
 
 ### Roles
@@ -1429,7 +1536,10 @@ Two invariants, and they are different:
 `invitations` stores a **hash** of the token, never the token. The raw token is
 returned exactly once, from `create_invitation()`. There is no INSERT grant on
 the table; every path goes through an RPC (`create_invitation`, `request_join`,
-`accept_invitation`, `approve_join_request`).
+`accept_invitation`, `approve_join_request`). Since migration 41 a visitor
+holding the token — and therefore no account yet — may read what the
+invitation says through `invitation_preview()`, the one function anon may
+execute; see §4o.
 
 ### Service role
 

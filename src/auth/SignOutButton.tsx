@@ -19,8 +19,12 @@ import { useI18n } from '@/hooks/useI18n';
  * for the same reason: the local state is cleared only after the network call
  * has returned, so nobody is left looking at a signed-in screen they cannot
  * get off.
+ *
+ * `to` is where the person goes afterwards. The invitation screen passes the
+ * sign-in that still carries its token, so whoever signed out of the wrong
+ * account can sign straight into the right one without reopening the email.
  */
-export function SignOutButton() {
+export function SignOutButton({ to = '/signin' }: { to?: string }) {
   const { t } = useI18n();
   const auth = useAuth();
   const dispatch = useAppDispatch();
@@ -35,7 +39,7 @@ export function SignOutButton() {
         void (async () => {
           await auth.signOut();
           dispatch({ type: 'signOut' });
-          navigate('/signin', { replace: true });
+          navigate(to, { replace: true });
         })();
       }}
     >

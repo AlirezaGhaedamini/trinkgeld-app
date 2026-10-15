@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/Icon';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { AUTH_FAILURE_KEY } from '@/auth/errors';
 import { safeReturnTo, takeReturnTo } from '@/auth/returnTo';
+import { invitationTokenFrom, joinPathFor, signUpPathFor } from '@/workplace/invitationLink';
 import { useAppDispatch, useAppState } from '@/hooks/useAppState';
 import { useAuth, useRealAuth } from '@/hooks/useAuth';
 import { useI18n } from '@/hooks/useI18n';
@@ -47,8 +48,13 @@ export function SignInPage() {
   const ready = demo || (email.trim().length > 0 && password.length > 0);
 
   /* Where RequireSession sent us from, query string included, so an
-     invitation link keeps its token across the sign-in. */
-  const from = safeReturnTo((location.state as { from?: unknown } | null)?.from);
+     invitation link keeps its token across the sign-in. An invitation that
+     came through the sign-up screen carries its token in THIS screen's URL
+     instead, so a refresh here keeps it too. */
+  const token = invitationTokenFrom(location.search);
+  const from = token
+    ? joinPathFor(token)
+    : safeReturnTo((location.state as { from?: unknown } | null)?.from);
 
   /* The demo's landing, chosen by the local role toggle. */
   const goHome = () => {
@@ -150,7 +156,13 @@ export function SignInPage() {
             variant="secondary"
             block
             disabled={auth.busy}
-            onClick={() => navigate('/signup', { state: location.state })}
+            // With an invitation the two auth screens REPLACE each other, so
+            // the history holds one token-bearing entry rather than a stack.
+            onClick={() =>
+              token
+                ? navigate(signUpPathFor(token), { replace: true, state: location.state })
+                : navigate('/signup', { state: location.state })
+            }
           >
             {t('createAcc')}
           </Button>

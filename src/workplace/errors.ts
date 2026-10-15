@@ -17,6 +17,7 @@ export type WorkplaceFailure =
   | 'invalidInvite'
   | 'inviteExpired'
   | 'inviteUsed'
+  | 'inviteWrongAccount'
   | 'alreadyMember'
   | 'notAllowed'
   | 'network'
@@ -30,6 +31,7 @@ export const WORKPLACE_FAILURE_KEY: Record<WorkplaceFailure, StringKey> = {
   invalidInvite: 'wpInvalidInvite',
   inviteExpired: 'wpInviteExpired',
   inviteUsed: 'wpInviteUsed',
+  inviteWrongAccount: 'wpInviteWrongAccount',
   alreadyMember: 'wpAlreadyMember',
   notAllowed: 'wpNotAllowed',
   network: 'authNetwork',
@@ -74,6 +76,7 @@ export function classifyWorkplaceError(
   const code = e.code ?? '';
 
   if (message.includes('already in this workplace') || code === '23505') return 'alreadyMember';
+  if (message.includes('sent to a different address')) return 'inviteWrongAccount';
   if (message.includes('has expired')) return 'inviteExpired';
   if (message.includes('already been used') || message.includes('withdrawn')) return 'inviteUsed';
   if (message.includes('did not match an open workplace')) return 'invalidCode';
@@ -88,4 +91,16 @@ export function classifyWorkplaceError(
   if (code === '22023') return context === 'create' ? 'nameRequired' : 'invalidCode';
 
   return context === 'create' ? 'createFailed' : 'unknown';
+}
+
+/**
+ * Why a previewed invitation can no longer be accepted, as the failure the
+ * join screen already knows how to word. Null while it is still open.
+ */
+export function invitationFailureFor(
+  status: 'pending' | 'accepted' | 'declined' | 'revoked' | 'expired',
+): WorkplaceFailure | null {
+  if (status === 'pending') return null;
+  if (status === 'expired') return 'inviteExpired';
+  return 'inviteUsed';
 }

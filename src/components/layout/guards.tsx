@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthSplash } from '@/auth/AuthSplash';
 import { clearReturnTo, peekReturnTo } from '@/auth/returnTo';
 import { isRecoveryCallback } from '@/auth/recovery';
+import { invitationTokenFrom, isInvitationVisit, signUpPathFor } from '@/workplace/invitationLink';
 import { useAppState } from '@/hooks/useAppState';
 import { useAuth, useRealAuth } from '@/hooks/useAuth';
 import { useActiveRole, useWorkplace } from '@/hooks/useWorkplace';
@@ -41,6 +42,11 @@ function useSessionGate(): Gate {
  * a link opened on a shared device is never waiting for whoever signs in
  * next. The only persisted return path is the one sign-up stores for an
  * email confirmation, bound to that account.
+ *
+ * An invitation link itself is the one visit that does not go to sign-in
+ * first. Whoever opens it most likely has no account yet — that is why they
+ * were invited — so they land on the invitation-aware sign-up, which carries
+ * the token in its own URL and offers sign-in to anybody who does have one.
  */
 export function RequireSession() {
   const gate = useSessionGate();
@@ -49,6 +55,10 @@ export function RequireSession() {
 
   if (gate === 'pending') return <AuthSplash />;
   if (gate === 'out') {
+    const token = invitationTokenFrom(location.search);
+    if (token && isInvitationVisit(location.pathname, location.search)) {
+      return <Navigate to={signUpPathFor(token)} replace state={{ from }} />;
+    }
     return <Navigate to="/signin" replace state={{ from }} />;
   }
   return <Outlet />;

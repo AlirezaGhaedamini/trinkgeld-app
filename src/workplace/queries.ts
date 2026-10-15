@@ -21,11 +21,13 @@
 
 import type { TipCrewClient } from '@/lib/supabase';
 import {
+  toInvitationPreview,
   toMembership,
   toWorkplaceSummary,
   type Membership,
   type WorkplaceSummary,
 } from '@/workplace/types';
+import type { InvitationPreview } from '@/workplace/types';
 
 /**
  * Every active membership the signed-in user has, with its workplace.
@@ -142,6 +144,24 @@ export async function acceptInvitationRpc(client: TipCrewClient, token: string):
   const { data, error } = await client.rpc('accept_invitation', { p_token: token });
   if (error) throw error;
   return typeof data === 'string' ? data : '';
+}
+
+/**
+ * What an invitation link says, before anyone has signed in.
+ *
+ * `invitation_preview()` (migration 41) is keyed by the token's hash, exactly
+ * as `accept_invitation()` is, and it is the one read in the schema that
+ * anon may call: the person holding the link has no account yet. An unknown
+ * token comes back as no row, not as an error.
+ */
+export async function fetchInvitationPreview(
+  client: TipCrewClient,
+  token: string,
+): Promise<InvitationPreview | null> {
+  const { data, error } = await client.rpc('invitation_preview', { p_token: token });
+  if (error) throw error;
+  const row = data?.[0];
+  return row ? toInvitationPreview(row) : null;
 }
 
 /**

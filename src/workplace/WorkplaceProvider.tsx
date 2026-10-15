@@ -82,20 +82,23 @@ export function WorkplaceProvider({ children }: { children: ReactNode }) {
 
   const userId = auth.userId;
 
-  const load = useCallback(async () => {
-    if (!client || !userId) return;
+  /** Resolves with the list it loaded, or null when nothing was loaded. */
+  const load = useCallback(async (): Promise<Membership[] | null> => {
+    if (!client || !userId) return null;
     const token = (loadToken.current += 1);
     setStatus((current) => (current === 'ready' ? current : 'loading'));
     try {
       const rows = await fetchMemberships(client, userId);
-      if (!alive.current || token !== loadToken.current) return;
+      if (!alive.current || token !== loadToken.current) return null;
       setMemberships(rows);
       setStatus('ready');
+      return rows;
     } catch {
-      if (!alive.current || token !== loadToken.current) return;
+      if (!alive.current || token !== loadToken.current) return null;
       // Keep whatever we had. An empty list here would look like "you have no
       // workplace" and bounce the user to onboarding over a dropped request.
       setStatus('error');
+      return null;
     }
   }, [client, userId]);
 
@@ -164,14 +167,14 @@ export function WorkplaceProvider({ children }: { children: ReactNode }) {
     async (
       context: 'create' | 'join' | 'invite',
       action: (c: TipCrewClient) => Promise<string>,
-      onDone?: (result: string) => void,
+      onDone?: (result: string, loaded: Membership[] | null) => void,
     ) => {
       if (!client || !enabled) return { ok: false as const, failure: 'notConfigured' as const };
       setBusy(true);
       try {
         const result = await action(client);
-        await load();
-        onDone?.(result);
+        const loaded = await load();
+        onDone?.(result, loaded);
         return { ok: true as const };
       } catch (error) {
         return { ok: false as const, failure: classifyWorkplaceError(error, context) };
@@ -211,7 +214,18 @@ export function WorkplaceProvider({ children }: { children: ReactNode }) {
     async (token) => {
       const trimmed = token.trim();
       if (!trimmed) return { ok: false, failure: 'invalidInvite' };
-      const result = await run('invite', (c) => acceptInvitationRpc(c, trimmed));
+      /* accept_invitation() returns the roster row it filled. Make its
+         workplace the active one in the same update that brings the list,
+         so somebody who already works elsewhere lands in the workplace that
+         just invited them rather than in the one they had open. */
+      const result = await run(
+        'invite',
+        (c) => acceptInvitationRpc(c, trimmed),
+        (memberId, loaded) => {
+          const joined = loaded?.find((m) => m.id === memberId);
+          if (joined) setActiveWorkplace(joined.workplaceId);
+        },
+      );
       if (result.ok || !acceptMayHaveSucceeded(result.failure) || !client || !userId) {
         return result;
       }
@@ -228,7 +242,7 @@ export function WorkplaceProvider({ children }: { children: ReactNode }) {
         return result;
       }
     },
-    [run, client, userId, load],
+    [run, client, userId, load, setActiveWorkplace],
   );
 
   // After accepting an invitation the new membership arrives with the reload
@@ -248,7 +262,9 @@ export function WorkplaceProvider({ children }: { children: ReactNode }) {
       role: activeMembership?.role ?? null,
       busy,
       setActiveWorkplace,
-      refresh: load,
+      refresh: async () => {
+        await load();
+      },
       createWorkplace,
       joinWithCode,
       acceptInvitation,
