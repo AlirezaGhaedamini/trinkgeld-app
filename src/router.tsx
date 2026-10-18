@@ -1,4 +1,8 @@
-import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import { AuthSplash } from '@/auth/AuthSplash';
+import { isAuthCallbackVisit, isAuthFragmentPath } from '@/auth/callback';
+import { RouteTitle } from '@/components/layout/RouteTitle';
 import { AppLayout } from '@/components/layout/AppLayout';
 import {
   HomeRedirect,
@@ -51,6 +55,35 @@ import { PeriodClosePage } from '@/pages/manager/PeriodClosePage';
 import { StaffReportsPage } from '@/pages/manager/StaffReportsPage';
 import { OverlapPage } from '@/pages/manager/OverlapPage';
 
+/* The public pages around the homepage load like the homepage itself: in their
+   own chunk, so the app bundle does not carry them. */
+const NotFoundPage = lazy(() =>
+  import('@/pages/marketing/NotFoundPage').then((m) => ({ default: m.NotFoundPage })),
+);
+const LegalPage = lazy(() =>
+  import('@/pages/marketing/LegalPage').then((m) => ({ default: m.LegalPage })),
+);
+
+/**
+ * The router's fallback: an address no route matches.
+ *
+ * Until the marketing page this was a redirect to the root, and two kinds of
+ * visit still need exactly that. HashRouter reads an auth fragment such as
+ * `#error=…&error_description=…` as a path, so a Supabase redirect that put
+ * its parameters in the fragment lands here, and the root is where it is
+ * turned into sign-in (HomeRedirect, src/auth/callback.ts). Anything else is a
+ * broken link and is shown as one rather than passed off as the homepage.
+ */
+function NoMatch() {
+  const { pathname } = useLocation();
+  if (isAuthCallbackVisit() || isAuthFragmentPath(pathname)) return <Navigate to="/" replace />;
+  return (
+    <Suspense fallback={<AuthSplash />}>
+      <NotFoundPage />
+    </Suspense>
+  );
+}
+
 /** /manager/rules/<page> → /manager/settings/<page>; the four page names did not change. */
 function LegacyRulesRedirect() {
   const { page } = useParams();
@@ -65,192 +98,215 @@ function LegacyRulesRedirect() {
  */
 export function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/" element={<HomeRedirect />} />
+    <>
+      {/* Before <Routes> on purpose: see RouteTitle for why the order matters. */}
+      <RouteTitle />
+      <Routes>
+        <Route path="/" element={<HomeRedirect />} />
 
-      {/* ── unauthenticated ─────────────────────────────────────────────── */}
-      {/* Signing in while already signed in makes no sense: bounce to the app. */}
-      <Route element={<RequireNoSession />}>
+        {/* ── public, for everybody, signed in or not ───────────────────────── */}
+        {/* Legal pages: structure only, content pending review (LegalPage). */}
+        <Route
+          path="/privacy"
+          element={
+            <Suspense fallback={<AuthSplash />}>
+              <LegalPage kind="privacy" />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/imprint"
+          element={
+            <Suspense fallback={<AuthSplash />}>
+              <LegalPage kind="imprint" />
+            </Suspense>
+          }
+        />
+
+        {/* ── unauthenticated ─────────────────────────────────────────────── */}
+        {/* Signing in while already signed in makes no sense: bounce to the app. */}
+        <Route element={<RequireNoSession />}>
+          <Route element={<AppLayout />}>
+            <Route path="/signin" element={<SignInPage />} />
+            <Route path="/reset" element={<ForgotPasswordPage />} />
+          </Route>
+        </Route>
+
+        {/*
+          Where a recovery link lands. NOT wrapped in RequireNoSession: following
+          the link establishes a session, which is exactly what lets the password
+          be changed, and a guard here would bounce the person past it.
+        */}
         <Route element={<AppLayout />}>
-          <Route path="/signin" element={<SignInPage />} />
-          <Route path="/reset" element={<ForgotPasswordPage />} />
+          <Route path="/reset/new" element={<NewPasswordPage />} />
         </Route>
-      </Route>
 
-      {/*
-        Where a recovery link lands. NOT wrapped in RequireNoSession: following
-        the link establishes a session, which is exactly what lets the password
-        be changed, and a guard here would bounce the person past it.
-      */}
-      <Route element={<AppLayout />}>
-        <Route path="/reset/new" element={<NewPasswordPage />} />
-      </Route>
-
-      {/*
-        Sign-up is NOT wrapped: it ends with a live session and then continues
-        to /join, so a blanket "already signed in? go to the app" guard here
-        would skip the workplace step entirely. SignUpPage turns an unrelated
-        visitor away itself.
-      */}
-      <Route element={<AppLayout />}>
-        <Route path="/signup" element={<SignUpPage />} />
-      </Route>
-
-      <Route element={<RequireSession />}>
         {/*
-          Onboarding. Behind the session (creating or joining a workplace needs
-          auth.uid()) but deliberately OUTSIDE RequireWorkplace, since these are
-          the two screens someone with no workplace is sent to.
+          Sign-up is NOT wrapped: it ends with a live session and then continues
+          to /join, so a blanket "already signed in? go to the app" guard here
+          would skip the workplace step entirely. SignUpPage turns an unrelated
+          visitor away itself.
         */}
-        {/*
-          Tabbed, even though these sit OUTSIDE RequireWorkplace. They are the
-          two screens a person reaches without an active workplace — but they
-          are also where somebody who already has one comes to switch, and the
-          release test found that path losing the bar: Settings, account card,
-          Workplace row. AppLayout withholds the bar when there is no active
-          membership, so onboarding still gets a clean screen and a switch does
-          not strand a manager.
-        */}
-        <Route element={<AppLayout withTabs />}>
-          <Route path="/join" element={<JoinWorkplacePage />} />
-          <Route path="/workplaces" element={<SelectWorkplacePage />} />
+        <Route element={<AppLayout />}>
+          <Route path="/signup" element={<SignUpPage />} />
         </Route>
-      </Route>
 
-      <Route element={<RequireSession />}>
-        <Route element={<RequireWorkplace />}>
-          {/* ── employee, and the inbox both roles share ──────────────────── */}
+        <Route element={<RequireSession />}>
           {/*
-            One tabbed group, not a tab-root group plus two untabbed ones. An
-            employee reading their share, reporting a night's tips or changing
-            the language is on a normal screen of the app, not in a mode, and
-            should be one tap from any other section rather than several
-            back-taps deep.
-
-            The inbox lives here too, and it is NOT duplicated per role: it is
-            one page on one route, and BottomNav asks useActiveRole() which set
-            of tabs to draw, so a manager who opens it keeps the manager bar
-            and an employee keeps the employee bar.
+            Onboarding. Behind the session (creating or joining a workplace needs
+            auth.uid()) but deliberately OUTSIDE RequireWorkplace, since these are
+            the two screens someone with no workplace is sent to.
+          */}
+          {/*
+            Tabbed, even though these sit OUTSIDE RequireWorkplace. They are the
+            two screens a person reaches without an active workplace — but they
+            are also where somebody who already has one comes to switch, and the
+            release test found that path losing the bar: Settings, account card,
+            Workplace row. AppLayout withholds the bar when there is no active
+            membership, so onboarding still gets a clean screen and a switch does
+            not strand a manager.
           */}
           <Route element={<AppLayout withTabs />}>
-            <Route path="/home" element={<HomePage />} />
-            {/* Also the rejected-shift deep link, /hours?shift=<id>: same
-                route, so the bar is there for the correction too. */}
-            <Route path="/hours" element={<MyHoursPage />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-
-            <Route path="/profile/language" element={<LanguagePage />} />
-            <Route path="/payout/:distributionId" element={<PayoutPage />} />
-            <Route path="/report" element={<ReportTipsPage />} />
-
-            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/join" element={<JoinWorkplacePage />} />
+            <Route path="/workplaces" element={<SelectWorkplacePage />} />
           </Route>
+        </Route>
 
-          {/* ── manager ───────────────────────────────────────────────────── */}
-          {/*
-            The manager area keeps its tab bar. Not only on the four roots: on
-            everything pushed from them too — a distribution and its payout,
-            correction and question states, the sent confirmation, a team
-            member, every settings subpage, the period close, the hours review,
-            the reports. Release testing found the old split trapping people:
-            finishing a distribution left them several screens deep with no way
-            to another section except unwinding the stack one back-tap at a
-            time.
+        <Route element={<RequireSession />}>
+          <Route element={<RequireWorkplace />}>
+            {/* ── employee, and the inbox both roles share ──────────────────── */}
+            {/*
+              One tabbed group, not a tab-root group plus two untabbed ones. An
+              employee reading their share, reporting a night's tips or changing
+              the language is on a normal screen of the app, not in a mode, and
+              should be one tap from any other section rather than several
+              back-taps deep.
 
-            It costs no layout. `.tabBar` is the last flex item of the screen
-            column, not a fixed overlay, so it takes its own room at the bottom
-            of the viewport, carries the iOS inset itself, and covers nothing —
-            `.body` is the only thing that scrolls. Screens learn it is there
-            through TabsPresentContext and set their bottom spacing from that.
-          */}
-          <Route element={<RequireManager />}>
+              The inbox lives here too, and it is NOT duplicated per role: it is
+              one page on one route, and BottomNav asks useActiveRole() which set
+              of tabs to draw, so a manager who opens it keeps the manager bar
+              and an employee keeps the employee bar.
+            */}
             <Route element={<AppLayout withTabs />}>
-              <Route path="/manager" element={<DashboardPage />} />
-              <Route path="/manager/distributions" element={<DistributionsPage />} />
-              <Route path="/manager/team" element={<TeamPage />} />
+              <Route path="/home" element={<HomePage />} />
+              {/* Also the rejected-shift deep link, /hours?shift=<id>: same
+                  route, so the bar is there for the correction too. */}
+              <Route path="/hours" element={<MyHoursPage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
 
-              <Route path="/manager/sent" element={<SentPage />} />
-              {/* The real confirmation names the night it is about, so a
-                  refresh reads the same record instead of a memory. */}
-              <Route path="/manager/sent/:distributionId" element={<SentPage />} />
-              <Route path="/manager/hours" element={<HoursReviewPage mode="review" />} />
-              <Route path="/manager/overlap" element={<OverlapPage />} />
-              <Route path="/manager/reports" element={<StaffReportsPage />} />
-              <Route path="/manager/invite" element={<InvitePage />} />
-              <Route path="/manager/team/:employeeId" element={<MemberPage />} />
-              <Route
-                path="/manager/distributions/:distributionId"
-                element={<DistributionDetailPage />}
-              />
+              <Route path="/profile/language" element={<LanguagePage />} />
+              <Route path="/payout/:distributionId" element={<PayoutPage />} />
+              <Route path="/report" element={<ReportTipsPage />} />
 
-              {/*
-                Settings — the whole subtree under ONE RuleEditorProvider, a
-                layout route: it stays mounted while the manager moves anywhere
-                inside, so an unactivated rule change survives a trip through
-                any section, Areas, Roles, the workplace settings or the period
-                close. Nothing is written until the draft is activated, and
-                leaving the subtree with changes waiting asks first. The
-                provider's header says why both matter.
-              */}
-              <Route element={<RuleEditorProvider />}>
-                <Route path="/manager/settings" element={<SettingsPage />} />
-                <Route path="/manager/settings/pool" element={<SettingsPoolPage />} />
-                <Route
-                  path="/manager/settings/working-together"
-                  element={<SettingsWorkingTogetherPage />}
-                />
-                <Route path="/manager/settings/within-area" element={<SettingsWithinAreaPage />} />
-                <Route
-                  path="/manager/settings/minimum-shared-time"
-                  element={<SettingsMinOverlapPage />}
-                />
-                <Route path="/manager/settings/rounding" element={<SettingsRoundingPage />} />
-                <Route
-                  path="/manager/settings/confirmation"
-                  element={<SettingsConfirmationPage />}
-                />
-                <Route path="/manager/settings/areas" element={<AreasPage />} />
-                <Route path="/manager/settings/roles" element={<RolesPage />} />
-                <Route path="/manager/settings/workplace" element={<WorkplaceSettingsPage />} />
-                <Route path="/manager/settings/period" element={<PeriodClosePage />} />
-              </Route>
+              <Route path="/notifications" element={<NotificationsPage />} />
             </Route>
 
-            {/* The tab was "Rules" at /manager/rules until the Settings split.
-                A bookmark, an open tab or a link from before still lands, on
-                the same screen under its new path. */}
-            <Route path="/manager/rules" element={<Navigate to="/manager/settings" replace />} />
-            <Route path="/manager/rules/:page" element={<LegacyRulesRedirect />} />
-
+            {/* ── manager ───────────────────────────────────────────────────── */}
             {/*
-              THE EXCEPTION, and the only one: the four steps of the
-              distribution wizard.
+              The manager area keeps its tab bar. Not only on the four roots: on
+              everything pushed from them too — a distribution and its payout,
+              correction and question states, the sent confirmation, a team
+              member, every settings subpage, the period close, the hours review,
+              the reports. Release testing found the old split trapping people:
+              finishing a distribution left them several screens deep with no way
+              to another section except unwinding the stack one back-tap at a
+              time.
 
-              Each step writes something real the moment it is passed — step 1
-              opens a tip_pools row and attaches the night's reports to it,
-              step 2 activates a rule version, step 4 calculates a draft
-              distribution — and a period close refuses to run while a draft is
-              open. All of it is recoverable (void_pool, discard the draft,
-              recalculate), so leaving is not destructive; but a tab bar here
-              would put four one-tap ways out under a flow that is halfway
-              through writing those rows, and the raised + in the middle of it
-              restarts the very wizard the manager is standing in. The wizard
-              carries its own step navigation and its own back arrow, which is
-              the whole of its navigation on purpose.
+              It costs no layout. `.tabBar` is the last flex item of the screen
+              column, not a fixed overlay, so it takes its own room at the bottom
+              of the viewport, carries the iOS inset itself, and covers nothing —
+              `.body` is the only thing that scrolls. Screens learn it is there
+              through TabsPresentContext and set their bottom spacing from that.
             */}
-            <Route element={<AppLayout />}>
-              <Route path="/manager/new" element={<Navigate to="/manager/new/pool" replace />} />
-              <Route path="/manager/new/pool" element={<WizardPoolPage />} />
-              <Route path="/manager/new/areas" element={<WizardAreasPage />} />
-              <Route path="/manager/new/hours" element={<HoursReviewPage mode="wizard" />} />
-              <Route path="/manager/new/result" element={<WizardResultPage />} />
+            <Route element={<RequireManager />}>
+              <Route element={<AppLayout withTabs />}>
+                <Route path="/manager" element={<DashboardPage />} />
+                <Route path="/manager/distributions" element={<DistributionsPage />} />
+                <Route path="/manager/team" element={<TeamPage />} />
+
+                <Route path="/manager/sent" element={<SentPage />} />
+                {/* The real confirmation names the night it is about, so a
+                    refresh reads the same record instead of a memory. */}
+                <Route path="/manager/sent/:distributionId" element={<SentPage />} />
+                <Route path="/manager/hours" element={<HoursReviewPage mode="review" />} />
+                <Route path="/manager/overlap" element={<OverlapPage />} />
+                <Route path="/manager/reports" element={<StaffReportsPage />} />
+                <Route path="/manager/invite" element={<InvitePage />} />
+                <Route path="/manager/team/:employeeId" element={<MemberPage />} />
+                <Route
+                  path="/manager/distributions/:distributionId"
+                  element={<DistributionDetailPage />}
+                />
+
+                {/*
+                  Settings — the whole subtree under ONE RuleEditorProvider, a
+                  layout route: it stays mounted while the manager moves anywhere
+                  inside, so an unactivated rule change survives a trip through
+                  any section, Areas, Roles, the workplace settings or the period
+                  close. Nothing is written until the draft is activated, and
+                  leaving the subtree with changes waiting asks first. The
+                  provider's header says why both matter.
+                */}
+                <Route element={<RuleEditorProvider />}>
+                  <Route path="/manager/settings" element={<SettingsPage />} />
+                  <Route path="/manager/settings/pool" element={<SettingsPoolPage />} />
+                  <Route
+                    path="/manager/settings/working-together"
+                    element={<SettingsWorkingTogetherPage />}
+                  />
+                  <Route path="/manager/settings/within-area" element={<SettingsWithinAreaPage />} />
+                  <Route
+                    path="/manager/settings/minimum-shared-time"
+                    element={<SettingsMinOverlapPage />}
+                  />
+                  <Route path="/manager/settings/rounding" element={<SettingsRoundingPage />} />
+                  <Route
+                    path="/manager/settings/confirmation"
+                    element={<SettingsConfirmationPage />}
+                  />
+                  <Route path="/manager/settings/areas" element={<AreasPage />} />
+                  <Route path="/manager/settings/roles" element={<RolesPage />} />
+                  <Route path="/manager/settings/workplace" element={<WorkplaceSettingsPage />} />
+                  <Route path="/manager/settings/period" element={<PeriodClosePage />} />
+                </Route>
+              </Route>
+
+              {/* The tab was "Rules" at /manager/rules until the Settings split.
+                  A bookmark, an open tab or a link from before still lands, on
+                  the same screen under its new path. */}
+              <Route path="/manager/rules" element={<Navigate to="/manager/settings" replace />} />
+              <Route path="/manager/rules/:page" element={<LegacyRulesRedirect />} />
+
+              {/*
+                THE EXCEPTION, and the only one: the four steps of the
+                distribution wizard.
+
+                Each step writes something real the moment it is passed — step 1
+                opens a tip_pools row and attaches the night's reports to it,
+                step 2 activates a rule version, step 4 calculates a draft
+                distribution — and a period close refuses to run while a draft is
+                open. All of it is recoverable (void_pool, discard the draft,
+                recalculate), so leaving is not destructive; but a tab bar here
+                would put four one-tap ways out under a flow that is halfway
+                through writing those rows, and the raised + in the middle of it
+                restarts the very wizard the manager is standing in. The wizard
+                carries its own step navigation and its own back arrow, which is
+                the whole of its navigation on purpose.
+              */}
+              <Route element={<AppLayout />}>
+                <Route path="/manager/new" element={<Navigate to="/manager/new/pool" replace />} />
+                <Route path="/manager/new/pool" element={<WizardPoolPage />} />
+                <Route path="/manager/new/areas" element={<WizardAreasPage />} />
+                <Route path="/manager/new/hours" element={<HoursReviewPage mode="wizard" />} />
+                <Route path="/manager/new/result" element={<WizardResultPage />} />
+              </Route>
             </Route>
           </Route>
         </Route>
-      </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<NoMatch />} />
+      </Routes>
+    </>
   );
 }

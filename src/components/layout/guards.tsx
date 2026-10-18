@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthSplash } from '@/auth/AuthSplash';
 import { clearReturnTo, peekReturnTo } from '@/auth/returnTo';
 import { isRecoveryCallback } from '@/auth/recovery';
+import { isAuthCallbackVisit } from '@/auth/callback';
 import { invitationTokenFrom, isInvitationVisit, signUpPathFor } from '@/workplace/invitationLink';
 import { useAppState } from '@/hooks/useAppState';
 import { useAuth, useRealAuth } from '@/hooks/useAuth';
@@ -126,10 +127,26 @@ export function RequireManager() {
   return <Outlet />;
 }
 
+/* Its own chunk: a signed-in person never downloads the marketing page, and the
+   app bundle does not grow by a landing page. */
+const MarketingPage = lazy(() =>
+  import('@/pages/marketing/MarketingPage').then((m) => ({ default: m.MarketingPage })),
+);
+
 /**
  * Send people to the right home for who they are.
  *
- * With one exception: an account that signed up on an invitation link and had
+ * A signed-out visitor at the root sees the public marketing page, rendered in
+ * place so the address stays the bare domain. Two exceptions keep the old
+ * behaviour, and both are decided before the marketing page is considered: a
+ * recovery callback goes to the new-password screen, and any other auth
+ * redirect from Supabase — a confirmation whose code could not be exchanged, an
+ * expired link — goes to sign-in as it always did (src/auth/callback.ts).
+ * Invitation links never reach this branch: `#/join?token=…` is a protected
+ * route, and RequireSession sends a signed-out holder to the invitation-aware
+ * sign-up.
+ *
+ * A signed-in person goes home, with one exception: an account that signed up on an invitation link and had
  * to confirm by email comes back to that link first, because the confirmation
  * reopens the app at its root. The remembered path is read only once routing
  * can actually be decided — memberships loaded, or their load failed — and
@@ -160,7 +177,14 @@ export function HomeRedirect() {
      because the session may still be being exchanged. */
   if (isRecoveryCallback()) return <Navigate to="/reset/new" replace />;
 
-  if (gate === 'out') return <Navigate to="/signin" replace />;
+  if (gate === 'out') {
+    if (isAuthCallbackVisit()) return <Navigate to="/signin" replace />;
+    return (
+      <Suspense fallback={<AuthSplash />}>
+        <MarketingPage />
+      </Suspense>
+    );
+  }
 
   if (workplace.enabled) {
     if (workplace.status === 'idle' || workplace.status === 'loading') return <AuthSplash />;

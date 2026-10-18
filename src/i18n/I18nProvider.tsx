@@ -44,9 +44,25 @@ function readStoredLanguage(): Language {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored === 'English' || stored === 'Deutsch') return stored;
   } catch {
-    /* private mode, blocked storage — fall through to the default */
+    /* private mode, blocked storage — fall through to the browser's language */
   }
-  return 'English';
+  return browserLanguage();
+}
+
+/**
+ * A first visit, with no choice stored yet, opens in the browser's language
+ * when that is German and in English otherwise. Only a default: nothing is
+ * written until the person picks a language themselves, so a later change of
+ * browser language still counts until then.
+ */
+function browserLanguage(): Language {
+  try {
+    const preferred = navigator.languages?.length ? navigator.languages : [navigator.language];
+    const first = (preferred[0] ?? '').toLowerCase();
+    return first === 'de' || first.startsWith('de-') ? 'Deutsch' : 'English';
+  } catch {
+    return 'English';
+  }
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {

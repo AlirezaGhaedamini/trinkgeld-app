@@ -8,11 +8,48 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"
     />
     <meta name="theme-color" content="#FFFFFF" />
-    <meta name="description" content="TipCrew — pooled tips, divided the way your team agreed." />
-    <title>TipCrew</title>
+    <!--
+      The public homepage's metadata. Crawlers only ever see the root — every
+      app screen lives behind a hash route, which is never sent to a server —
+      so this one set describes the marketing page and nothing private.
+      MarketingPage swaps title and description for the German pair at runtime.
+    -->
+    <title>TipCrew – Fair tip distribution for hospitality teams</title>
+    <meta
+      name="description"
+      content="TipCrew helps restaurants, cafés, bars and hotels share pooled tips transparently — based on working time, roles and the rules your team chooses."
+    />
+    <link rel="canonical" href="https://tipcrew.de/" />
+    <meta name="robots" content="index, follow" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TipCrew" />
+    <meta property="og:url" content="https://tipcrew.de/" />
+    <meta property="og:title" content="TipCrew – Fair tip distribution for hospitality teams" />
+    <meta
+      property="og:description"
+      content="Share pooled tips transparently — based on working time, roles and the rules your team chooses."
+    />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:locale:alternate" content="de_DE" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="TipCrew – Fair tip distribution for hospitality teams" />
+    <meta
+      name="twitter:description"
+      content="Share pooled tips transparently — based on working time, roles and the rules your team chooses."
+    />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>TipCrew – Fair tip distribution for hospitality teams</h1>
+      <p>
+        TipCrew helps restaurants, cafés, bars and hotels share pooled tips transparently — based
+        on working time, roles and the rules your team chooses. Please enable JavaScript to use
+        TipCrew.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
