@@ -2232,7 +2232,7 @@ export const DE: Record<StringKey, string> = {
   mkHeroLead: "TipCrew hilft Gastro-Teams, gemeinsames Trinkgeld nachvollziehbar zu verteilen – nach Arbeitszeit, Rollen und den Regeln, die in eurem Betrieb wirklich gelten.",
   mkHeroSecondary: "So funktioniert's",
   mkHeroNote: "Läuft im Browser · Deutsch und Englisch",
-  mkVisualLabel: "Beispiel einer Trinkgeld-Verteilung in TipCrew",
+  mkVisualLabel: "Beispiel einer Trinkgeldverteilung in TipCrew",
   mkBuiltFor: "Gemacht für Teams in",
   mkVenueRestaurants: "Restaurants",
   mkVenueCafes: "Cafés",
